@@ -1,0 +1,5 @@
+archive/
+*.txz
+*.txz.md5
+.DS_Store
+Thumbs.db

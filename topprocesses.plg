@@ -1,0 +1,61 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "topprocesses">
+  <!ENTITY author    "rafablues94">
+  <!ENTITY version   "2026.06.28">
+  <!ENTITY github    "rafablues94/unraid-topprocesses">
+  <!ENTITY plugin    "/boot/config/plugins/&name;">
+  <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/master/&name;.plg">
+  <!ENTITY pkgURL    "https://raw.githubusercontent.com/&github;/master/archive/&name;-&version;-x86_64-1.txz">
+  <!ENTITY md5       "PUT_TXZ_MD5_HERE">
+]>
+
+<PLUGIN name="&name;"
+        author="&author;"
+        version="&version;"
+        pluginURL="&pluginURL;"
+        launch="Settings/TopProcessesSettings"
+        icon="tasks"
+        min="6.12.0">
+
+  <CHANGES>
+###2026.06.28
+- Initial release: Top Processes dashboard widget (CPU/MEM top-N, sort toggle, configurable interval).
+  </CHANGES>
+
+  <!-- Gate: require Unraid 6.12+ -->
+  <FILE Run="/usr/bin/php">
+    <INLINE><![CDATA[<?php
+      $v = parse_ini_file('/etc/unraid-version')['version'] ?? '0';
+      if (version_compare($v, '6.12.0', '<')) {
+        echo "\n*** Top Processes requires Unraid 6.12.0 or newer (found $v). ***\n";
+        exit(1);
+      }
+    ?>]]></INLINE>
+  </FILE>
+
+  <!-- Download + install the package (idempotent across boots/updates) -->
+  <FILE Name="&plugin;/&name;-&version;-x86_64-1.txz" Run="upgradepkg --install-new --reinstall">
+    <URL>&pkgURL;</URL>
+    <MD5>&md5;</MD5>
+  </FILE>
+
+  <!-- Seed default config on first install only -->
+  <FILE Run="/bin/bash">
+    <INLINE>
+      [ -f &plugin;/&name;.cfg ] || cp &emhttp;/default.cfg &plugin;/&name;.cfg
+      echo ""
+      echo "Top Processes installed. Open the Dashboard to see the tile."
+    </INLINE>
+  </FILE>
+
+  <!-- Uninstall -->
+  <FILE Run="/bin/bash" Method="remove">
+    <INLINE>
+      removepkg &name;-&version;-x86_64-1 2&gt;/dev/null
+      rm -rf &emhttp; &plugin;
+    </INLINE>
+  </FILE>
+
+</PLUGIN>

@@ -1,0 +1,19 @@
+Menu="Dashboard:0"
+Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.11.9','>')"
+---
+<?php
+/* Top Processes — Dashboard tile registration.
+ * Attaches to the Dashboard, registers the tile via $mytiles, and loads assets.
+ * Asset URLs are cache-busted with autov() when available, else a static ?v=. */
+include '/usr/local/emhttp/plugins/topprocesses/include/TopProcesses.php';
+
+$css = '/plugins/topprocesses/styles/topprocesses.css';
+$js  = '/plugins/topprocesses/javascript/topprocesses.js';
+if (function_exists('autov')) {
+  echo "<link type='text/css' rel='stylesheet' href='".autov($css)."'>";
+  echo "<script src='".autov($js)."'></script>";
+} else {
+  echo "<link type='text/css' rel='stylesheet' href='$css?v=2026.06.28'>";
+  echo "<script src='$js?v=2026.06.28'></script>";
+}
+?>

@@ -1,0 +1,41 @@
+Menu="Utilities"
+Title="Top Processes"
+Icon="tasks"
+Tag="tasks"
+---
+<?php
+/* Top Processes — settings. Writes /boot/config/plugins/topprocesses/topprocesses.cfg
+ * through Unraid's standard /update.php + hidden #file mechanism. */
+$cfg = @parse_ini_file('/boot/config/plugins/topprocesses/topprocesses.cfg')
+     ?: ['TOPN' => 8, 'SORT' => 'cpu', 'INTERVAL' => 5];
+$topn = (int) ($cfg['TOPN'] ?? 8);
+$sort = (($cfg['SORT'] ?? 'cpu') === 'mem') ? 'mem' : 'cpu';
+$intv = (int) ($cfg['INTERVAL'] ?? 5);
+?>
+<form markdown="1" method="POST" action="/update.php" target="progressFrame">
+<input type="hidden" name="#file" value="topprocesses/topprocesses.cfg">
+
+_(Number of processes shown)_:
+: <input type="number" name="TOPN" min="3" max="25" value="<?=$topn?>">
+
+_(Default sort)_:
+: <select name="SORT">
+    <option value="cpu" <?=$sort==='cpu'?'selected':''?>>_(CPU)_</option>
+    <option value="mem" <?=$sort==='mem'?'selected':''?>>_(Memory)_</option>
+  </select>
+
+_(Refresh interval)_:
+: <select name="INTERVAL">
+    <option value="2"  <?=$intv===2 ?'selected':''?>>2 _(seconds)_</option>
+    <option value="5"  <?=$intv===5 ?'selected':''?>>5 _(seconds)_</option>
+    <option value="10" <?=$intv===10?'selected':''?>>10 _(seconds)_</option>
+    <option value="0"  <?=$intv===0 ?'selected':''?>>_(off)_</option>
+  </select>
+
+&nbsp;
+: <input type="submit" value="_(Apply)_">
+
+</form>
+
+> _(These are the defaults applied when the Dashboard tile first loads. The CPU/MEM
+> toggle and interval selector on the tile itself override them for the current view.)_

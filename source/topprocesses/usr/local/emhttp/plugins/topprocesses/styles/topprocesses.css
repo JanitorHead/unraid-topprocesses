@@ -1,0 +1,87 @@
+/* Top Processes — tile styling.
+ * Reuses native dynamix header classes; only the per-row table and the
+ * grey-track / green-fill mini bars are custom. Colours use theme tokens
+ * with hex fallbacks so the tile tracks white/black/gray/azure. */
+
+.tp-glyph { font-size: 2.4rem; }
+
+.tp-subtitle { opacity: .65; font-size: 1.1rem; }
+
+/* header controls (sit next to the native gear / collapse icons) */
+.tp-toggle { margin-right: .4rem; user-select: none; }
+.tp-toggle a {
+  cursor: pointer;
+  padding: 0 .35rem;
+  opacity: .5;
+  font-size: 1.1rem;
+  font-weight: bold;
+  letter-spacing: .03em;
+}
+.tp-toggle a.tp-on { opacity: 1; color: var(--green-500, #17bf0b); }
+
+.tp-interval {
+  font-size: 1.1rem;
+  margin: 0 .35rem 0 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* rows */
+.tp-table { width: 100%; border-collapse: collapse; }
+.tp-table td {
+  padding: 3px 6px;
+  line-height: 1.6rem;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.tp-name {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: bold;
+}
+.tp-user { opacity: .8; }
+.tp-pid {
+  opacity: .55;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tp-bars { width: 46%; min-width: 9rem; }
+.tp-empty { opacity: .6; text-align: center; font-style: italic; }
+
+/* mini bars: grey track + green gradient fill */
+.tp-bar {
+  position: relative;
+  height: 13px;
+  border-radius: 3px;
+  margin: 2px 0;
+  background-color: var(--usage-disk-background-color, #d8d8d8);
+  overflow: hidden;
+}
+.tp-fill {
+  position: absolute;
+  left: 0; top: 0;
+  height: 100%;
+  border-radius: 3px;
+  transition: width .35s ease;
+  background: linear-gradient(90deg,
+              var(--green-900, #0f7a05) 0,
+              var(--green-500, #17bf0b) 100%);
+}
+.tp-bar > em {
+  position: absolute;
+  right: 5px; top: 0;
+  line-height: 13px;
+  font-size: 1rem;
+  font-style: normal;
+  color: var(--text-color, #1d1b1b);
+  text-shadow: 0 0 2px var(--usage-disk-background-color, #d8d8d8);
+}
+
+/* threshold escalation (fill + percentage text) */
+.tp-fill.tp-warn { background: linear-gradient(90deg, #d68a00 0, #ffb300 100%); }
+.tp-fill.tp-crit { background: linear-gradient(90deg, #c0392b 0, #ff5436 100%); }
+em.tp-warn { color: #e08a00; }
+em.tp-crit { color: #e23b1e; }
