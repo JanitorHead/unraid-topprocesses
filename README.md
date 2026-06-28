@@ -23,7 +23,7 @@ never *which process* is responsible.
 Unraid → **Plugins → Install Plugin** → paste the raw URL of `topprocesses.plg`:
 
 ```
-https://raw.githubusercontent.com/rafablues94/unraid-topprocesses/master/topprocesses.plg
+https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/topprocesses.plg
 ```
 
 Then open the **Dashboard** — the *Top Processes* tile appears in the left column.
@@ -52,7 +52,7 @@ Verify the data endpoint at `http://TOWER/plugins/topprocesses/include/getprocs.
 
 ## Publishing to Community Applications
 
-1. Push this repo to GitHub as `rafablues94/unraid-topprocesses` (public), add the
+1. Push this repo to GitHub as `JanitorHead/unraid-topprocesses` (public), add the
    topics `unraid` and `unraid-plugin`.
 2. Ensure `LICENSE` (MIT), `ca_profile.xml`, `plugins/topprocesses.xml` and
    `images/topprocesses.png` are present (they are). `PluginURL` in

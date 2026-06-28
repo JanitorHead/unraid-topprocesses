@@ -7,8 +7,8 @@ set -e
 
 NAME=topprocesses
 VER="${1:-2026.06.28}"
-AUTHOR=rafablues94
-GITHUB=rafablues94/unraid-topprocesses
+AUTHOR=JanitorHead
+GITHUB=JanitorHead/unraid-topprocesses
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BASE="$ROOT/source/$NAME"
 EMHTTP="usr/local/emhttp/plugins/$NAME"

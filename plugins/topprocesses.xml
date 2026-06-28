@@ -2,13 +2,13 @@
 <Plugin>
   <Name>Top Processes</Name>
   <Overview>A minimalist, native-looking Unraid Dashboard tile listing the processes consuming the most CPU or memory — like htop, but matching Unraid's aesthetic. Shows process name, user, PID and threshold-coloured %CPU / %MEM bars with absolute memory. Toggle CPU/MEM (click the active metric again to reverse) and the refresh interval right from the tile header.</Overview>
-  <PluginURL>https://raw.githubusercontent.com/rafablues94/unraid-topprocesses/master/topprocesses.plg</PluginURL>
-  <PluginAuthor>rafablues94</PluginAuthor>
-  <Support>https://github.com/rafablues94/unraid-topprocesses</Support>
-  <Project>https://github.com/rafablues94/unraid-topprocesses</Project>
-  <ReadMe>https://raw.githubusercontent.com/rafablues94/unraid-topprocesses/master/README.md</ReadMe>
+  <PluginURL>https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/topprocesses.plg</PluginURL>
+  <PluginAuthor>JanitorHead</PluginAuthor>
+  <Support>https://github.com/JanitorHead/unraid-topprocesses</Support>
+  <Project>https://github.com/JanitorHead/unraid-topprocesses</Project>
+  <ReadMe>https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/README.md</ReadMe>
   <Category>Tools:System</Category>
-  <Icon>https://raw.githubusercontent.com/rafablues94/unraid-topprocesses/master/images/topprocesses.png</Icon>
+  <Icon>https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/images/topprocesses.png</Icon>
   <License>MIT</License>
   <MinVer>6.12</MinVer>
 </Plugin>

@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-28
 **Plugin id:** `topprocesses`
-**Author:** rafablues94
+**Author:** JanitorHead
 **Target:** Unraid 7.x (min 6.12.0)
 
 ## 1. Goal

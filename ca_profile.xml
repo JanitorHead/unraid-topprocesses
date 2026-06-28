@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <CommunityApplications>
   <Profile>Top Processes — a minimalist, native-looking Unraid Dashboard tile listing the processes consuming the most CPU or memory.</Profile>
-  <Icon>https://raw.githubusercontent.com/rafablues94/unraid-topprocesses/master/images/topprocesses.png</Icon>
-  <WebPage>https://github.com/rafablues94/unraid-topprocesses</WebPage>
-  <Forum>https://github.com/rafablues94/unraid-topprocesses</Forum>
+  <Icon>https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/images/topprocesses.png</Icon>
+  <WebPage>https://github.com/JanitorHead/unraid-topprocesses</WebPage>
+  <Forum>https://github.com/JanitorHead/unraid-topprocesses</Forum>
 </CommunityApplications>
