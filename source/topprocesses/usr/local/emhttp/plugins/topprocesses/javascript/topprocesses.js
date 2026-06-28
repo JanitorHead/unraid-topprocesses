@@ -39,6 +39,17 @@
   function setText(el, v) { v = String(v == null ? '' : v); if (el.textContent !== v) { el.textContent = v; } }
   function rowsBox() { if (!box) { box = document.getElementById('tp_rows'); } return box; }
 
+  function metricLine(tagText) {
+    var line = document.createElement('div'); line.className = 'tp-metric';
+    var tag  = document.createElement('span'); tag.className = 'tp-tag'; tag.textContent = tagText;
+    var bar  = document.createElement('span'); bar.className = 'tp-bar'; bar.setAttribute('aria-hidden', 'true');
+    var fill = document.createElement('span'); fill.className = 'tp-fill'; bar.appendChild(fill);
+    var pct  = document.createElement('span'); pct.className = 'tp-pct';
+    var sec  = document.createElement('span'); sec.className = 'tp-sec';
+    line.appendChild(tag); line.appendChild(bar); line.appendChild(pct); line.appendChild(sec);
+    return { line: line, fill: fill, pct: pct, sec: sec };
+  }
+
   function makeRow() {
     var row = document.createElement('div'); row.className = 'tp-row';
     var head = document.createElement('div'); head.className = 'tp-head';
@@ -46,30 +57,37 @@
     var user = document.createElement('span'); user.className = 'tp-user';
     var pid  = document.createElement('span'); pid.className = 'tp-pid';
     head.appendChild(name); head.appendChild(user); head.appendChild(pid);
-    var line = document.createElement('div'); line.className = 'tp-metric';
-    var bar  = document.createElement('span'); bar.className = 'tp-bar'; bar.setAttribute('aria-hidden', 'true');
-    var fill = document.createElement('span'); fill.className = 'tp-fill'; bar.appendChild(fill);
-    var pct  = document.createElement('span'); pct.className = 'tp-pct';
-    var sec  = document.createElement('span'); sec.className = 'tp-sec';
-    line.appendChild(bar); line.appendChild(pct); line.appendChild(sec);
-    row.appendChild(head); row.appendChild(line);
-    return { row: row, name: name, user: user, pid: pid, fill: fill, pct: pct, sec: sec };
+    var cpu = metricLine('CPU');   // cpu.sec stays empty — alignment spacer only
+    var mem = metricLine('MEM');
+    row.appendChild(head); row.appendChild(cpu.line); row.appendChild(mem.line);
+    return {
+      row: row, name: name, user: user, pid: pid,
+      cpuFill: cpu.fill, cpuPct: cpu.pct,
+      memFill: mem.fill, memPct: mem.pct, memSec: mem.sec
+    };
+  }
+
+  /* drive one rail from its own value: width, severity colour on fill + % */
+  function setRail(fill, pct, val) {
+    var lv = level(val);
+    var w = Math.max(0, Math.min(100, val)) + '%';
+    if (fill.style.width !== w) { fill.style.width = w; }
+    var fc = 'tp-fill tp-' + lv + (val <= 0 ? ' tp-zero' : '');
+    if (fill.className !== fc) { fill.className = fc; }
+    setText(pct, fmtPct(val));
+    var pc = 'tp-pct tp-' + lv;
+    if (pct.className !== pc) { pct.className = pc; }
   }
 
   function updateRow(n, p, isTop) {
-    var active = (sort === 'mem') ? num(p.mem) : num(p.cpu);
-    var lv = level(active);
     setText(n.name, p.cmd);
     var title = p.full || p.cmd || '';
     if (n.name.title !== title) { n.name.title = title; }
     setText(n.user, p.user);
     setText(n.pid, p.pid);
-    var w = Math.max(0, Math.min(100, active)) + '%';
-    if (n.fill.style.width !== w) { n.fill.style.width = w; }
-    var fc = 'tp-fill tp-' + lv; if (n.fill.className !== fc) { n.fill.className = fc; }
-    setText(n.pct, fmtPct(active));
-    var pc = 'tp-pct tp-' + lv; if (n.pct.className !== pc) { n.pct.className = pc; }
-    setText(n.sec, fmtKb(p.rss));
+    setRail(n.cpuFill, n.cpuPct, num(p.cpu));
+    setRail(n.memFill, n.memPct, num(p.mem));
+    setText(n.memSec, fmtKb(p.rss));
     n.row.classList.toggle('tp-top', !!isTop);
   }
 

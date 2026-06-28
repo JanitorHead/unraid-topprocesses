@@ -1,12 +1,15 @@
 /* Top Processes — tile styling. Flat and native: square bars like the stock
- * Processor/Array usage bars, the refresh selector is a native <select class=auto>
- * (same as the Processor "30 s" dropdown), CPU/MEM are plain text tabs. Theme
- * tokens with hex fallbacks. No dollar signs (inlined from a heredoc). */
+ * Processor/Array usage bars. Dual-metric row = TWO stacked full-width rails
+ * (CPU then MEM) reusing the same .tp-bar/.tp-fill primitive twice; both rails
+ * share a left origin AND right edge, so a CPU-vs-MEM delta reads as raw bar
+ * length. CPU vs MEM is told apart by a fixed-width text TAG, never by hue —
+ * colour stays severity-only (native). Theme tokens with hex fallbacks. No
+ * dollar signs (heredoc-safe). */
 
 .tp-glyph { font-size: 2.4rem; }
 .tp-subtitle { opacity: .6; font-size: 1.05rem; }
 
-/* CPU/MEM selector — plain text tabs (active = bold/solid, inactive = muted) */
+/* CPU/MEM selector — plain text tabs (now SORT/order only; both bars always show) */
 .tp-seg { display: inline-flex; gap: .55rem; margin-right: .55rem; }
 .tp-seg button {
   margin: 0; padding: 0;
@@ -32,6 +35,7 @@ select.tp-int { font-size: 1.05rem; margin-right: .35rem; cursor: pointer; }
 .tp-row:hover { background: rgba(128,128,128,.06); }
 .tp-row.tp-top { background: rgba(128,128,128,.10); }   /* busiest — neutral, never green */
 
+/* head: bold name (ellipsis), muted user, muted PID */
 .tp-head { display: flex; align-items: baseline; gap: .5rem; }
 .tp-name {
   font-weight: bold;
@@ -44,11 +48,36 @@ select.tp-int { font-size: 1.05rem; margin-right: .35rem; cursor: pointer; }
 .tp-user { flex: 0 0 auto; opacity: .6; font-size: .95rem; }
 .tp-pid  { flex: 0 0 auto; opacity: .5; font-size: .95rem; font-variant-numeric: tabular-nums; }
 
-.tp-metric { display: flex; align-items: center; gap: .5rem; margin-top: 2px; }
+/* two stacked metric lines: tag + full-width flat rail + % (+ RSS on MEM).
+ * Tight rhythm so each row still earns its height. */
+.tp-metric {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin-top: 2px;
+  line-height: 1.25;
+}
+.tp-metric:first-of-type { margin-top: 3px; }   /* small breath under the name */
+
+/* fixed-width text tag = the ONLY CPU-vs-MEM differentiator (colour stays severity) */
+.tp-tag {
+  flex: 0 0 auto;
+  width: 2.2rem;
+  font-size: .78rem;
+  font-weight: bold;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  opacity: .45;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+/* the rail: flat + SQUARE, native disk-usage track colour, thinned to 9px so
+ * two rails still fit ~6 rows in the tile */
 .tp-bar {
   position: relative;
   flex: 1 1 auto;
-  height: 14px;
+  height: 9px;
   border-radius: 0;                                   /* square, like native usage bars */
   background-color: var(--usage-disk-background-color, #d8d8d8);
   overflow: hidden;
@@ -56,19 +85,37 @@ select.tp-int { font-size: 1.05rem; margin-right: .35rem; cursor: pointer; }
 .tp-fill {
   position: absolute;
   left: 0; top: 0;
-  height: 100%;
+  width: 0; height: 100%;
+  min-width: 1px;                                     /* keep tiny non-zero fills visible */
   border-radius: 0;
   transition: width .35s ease;
   background: var(--green-500, #17bf0b);
 }
+.tp-fill.tp-zero { min-width: 0; }                    /* true 0% -> empty track */
+/* threshold colours — computed PER RAIL from its own value, identical ramp */
 .tp-fill.tp-warn { background: var(--orange-500, #e0922e); }
 .tp-fill.tp-crit { background: var(--red-500, #e23232); }
 
-.tp-pct { flex: 0 0 auto; width: 3rem; text-align: right; font-variant-numeric: tabular-nums; }
+/* per-rail % readout */
+.tp-pct {
+  flex: 0 0 auto;
+  width: 2.6rem;
+  text-align: right;
+  font-size: .95rem;
+  font-variant-numeric: tabular-nums;
+}
 .tp-pct.tp-warn { color: var(--orange-700, #c87f12); }
 .tp-pct.tp-crit { color: var(--red-600, #c41e1e); }
 
-.tp-sec { flex: 0 0 auto; width: 3rem; text-align: right; opacity: .5; font-size: .95rem; font-variant-numeric: tabular-nums; }
+/* RSS column — present (empty) on the CPU line too, so both rails align */
+.tp-sec {
+  flex: 0 0 auto;
+  width: 2.7rem;
+  text-align: right;
+  opacity: .5;
+  font-size: .9rem;
+  font-variant-numeric: tabular-nums;
+}
 
 .tp-empty { opacity: .6; text-align: center; font-style: italic; padding: 6px; }
 
