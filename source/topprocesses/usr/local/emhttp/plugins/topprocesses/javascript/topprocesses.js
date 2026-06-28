@@ -1,9 +1,10 @@
 /* Top Processes — Dashboard tile client.
- * Keyed in-place DOM updates (no innerHTML rebuild): bars actually animate, no
- * flicker, no string-attribute XSS surface. One bar for the active sort metric
- * + a quiet absolute-RSS number; CPU/MEM segmented control doubles as the sort
- * key (click the active one to reverse). Self-healing lifecycle, fetch timeout,
- * per-host view memory. Vanilla JS, no deps, no dollar signs (heredoc-safe). */
+ * Keyed in-place DOM updates (bars animate, no flicker, no string-attr XSS).
+ * One bar for the active sort metric + quiet absolute RSS. CPU/MEM segmented
+ * control doubles as the sort key (click active to reverse). Refresh cadence is
+ * a click-to-cycle pill (clear affordance). Polls ONLY while the tile is both
+ * tab-visible AND on-screen/expanded (visibilitychange + IntersectionObserver),
+ * self-heals if the tile is removed. Vanilla JS, no deps, no dollar signs. */
 (function () {
   'use strict';
 
@@ -20,7 +21,7 @@
   var interval = parseInt(tile.dataset.interval || '5', 10);
   if (isNaN(interval)) { interval = 5; }
 
-  try {                                   // restore last view; cfg is first-paint default only
+  try {
     var saved = JSON.parse(localStorage.getItem(STORE) || '{}');
     if (saved.sort === 'cpu' || saved.sort === 'mem') { sort = saved.sort; }
     if (saved.dir === 'asc' || saved.dir === 'desc') { dir = saved.dir; }
@@ -29,6 +30,7 @@
   if (ALLOWED.indexOf(interval) < 0) { interval = 5; }
 
   var timer = null, busy = false, lastTotal = 0, lastData = null, box = null;
+  var tabVis = !document.hidden, tileVis = true;
   var nodes = Object.create(null);
 
   function save() { try { localStorage.setItem(STORE, JSON.stringify({ sort: sort, dir: dir, interval: interval })); } catch (e) {} }
@@ -112,11 +114,11 @@
   function setStale(on) { var b = rowsBox(); if (b) { b.classList.toggle('tp-stale', !!on); } }
 
   function poll() {
-    if (!document.body.contains(tile)) { teardown(); return; }   // self-heal if Unraid replaced the tile
+    if (!document.body.contains(tile)) { teardown(); return; }
     if (busy) { return; }
     busy = true;
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var to = ctrl ? setTimeout(function () { ctrl.abort(); }, Math.min(Math.max(interval * 1000 - 250, 3000), 10000)) : null;
+    var to = ctrl ? setTimeout(function () { ctrl.abort(); }, Math.min(Math.max((interval || 5) * 1000 - 250, 3000), 10000)) : null;
     fetch(ENDPOINT, { cache: 'no-store', credentials: 'same-origin', signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
@@ -129,10 +131,11 @@
       .then(function () { if (to) { clearTimeout(to); } busy = false; });
   }
 
-  function arm() {
+  /* run only while tab-visible AND tile on-screen/expanded, and interval > 0 */
+  function shouldRun() { return tabVis && tileVis && interval > 0; }
+  function reschedule() {
     if (timer) { clearInterval(timer); timer = null; }
-    poll();
-    if (interval > 0) { timer = setInterval(poll, interval * 1000); }
+    if (shouldRun()) { poll(); timer = setInterval(poll, interval * 1000); }
   }
 
   function syncToggle() {
@@ -145,20 +148,23 @@
       btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
     }
   }
-
   function onSortClick(k) {
     if (k === sort) { dir = (dir === 'desc') ? 'asc' : 'desc'; }
     else { sort = k; dir = 'desc'; }
-    syncToggle(); render(); updateSubtitle(); save(); poll();   // instant re-render from cache, then refresh
+    syncToggle(); render(); updateSubtitle(); save(); poll();
   }
 
-  function onVis() {
-    if (document.hidden) { if (timer) { clearInterval(timer); timer = null; } }
-    else { arm(); }
+  var pill = document.getElementById('tp_int'), pillv = document.getElementById('tp_int_v');
+  function syncPill() {
+    if (pillv) { setText(pillv, interval > 0 ? interval + 's' : 'off'); }
+    if (pill) { pill.classList.toggle('tp-off', interval === 0); pill.setAttribute('aria-label', 'Refresh: ' + (interval > 0 ? interval + ' seconds' : 'off')); }
   }
+
+  function onVis() { tabVis = !document.hidden; reschedule(); }
   function teardown() {
     if (timer) { clearInterval(timer); timer = null; }
     document.removeEventListener('visibilitychange', onVis);
+    if (io) { try { io.disconnect(); } catch (e) {} }
   }
 
   var btns = tile.querySelectorAll('#tp_sort button');
@@ -167,18 +173,26 @@
   }
   syncToggle();
 
-  var sel = document.getElementById('tp_interval');
-  if (sel) {
-    if (!sel.querySelector('option[value="' + interval + '"]')) {
-      var o = document.createElement('option'); o.value = String(interval); o.textContent = interval + 's'; sel.appendChild(o);
-    }
-    sel.value = String(interval);
-    sel.addEventListener('change', function () {
-      interval = parseInt(sel.value, 10); if (isNaN(interval)) { interval = 0; }
-      save(); arm();
+  if (pill) {
+    syncPill();
+    pill.addEventListener('click', function () {
+      var idx = ALLOWED.indexOf(interval);
+      interval = ALLOWED[(idx + 1) % ALLOWED.length];
+      if (idx < 0) { interval = 5; }
+      syncPill(); save(); reschedule();
     });
   }
 
+  /* pause when the rows are collapsed (native chevron -> height 0) or scrolled off-screen */
+  var io = null;
+  if (typeof IntersectionObserver !== 'undefined') {
+    io = new IntersectionObserver(function (entries) {
+      var vis = !!(entries[0] && entries[0].isIntersecting);
+      if (vis !== tileVis) { tileVis = vis; reschedule(); }
+    });
+    var rb = rowsBox(); if (rb) { io.observe(rb); }
+  }
+
   document.addEventListener('visibilitychange', onVis);
-  arm();
+  reschedule();
 })();

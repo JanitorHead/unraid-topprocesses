@@ -1,15 +1,16 @@
-/* Top Processes — tile styling. Flat, native, single-accent (no gradients).
- * Colours use Unraid theme tokens with hex fallbacks so it tracks white/black/
- * gray/azure. Rows are flex <div>s. No dollar signs (inlined from a heredoc). */
+/* Top Processes — tile styling. Flat and native: square bars like the stock
+ * Processor/Array usage bars, theme tokens with hex fallbacks (tracks white/
+ * black/gray/azure), single accent colour. Rows are flex <div>s. No gradients,
+ * no rounded bars. No dollar signs (inlined from a heredoc). */
 
 .tp-glyph { font-size: 2.4rem; }
 .tp-subtitle { opacity: .6; font-size: 1.05rem; }
 
-/* CPU/MEM segmented control — also the sort key; caret shows direction */
+/* header controls — subtle, match Unraid's control chrome */
 .tp-seg {
   display: inline-flex;
   border: 1px solid var(--border-color, rgba(128,128,128,.35));
-  border-radius: 4px;
+  border-radius: 2px;
   overflow: hidden;
   margin-right: .45rem;
 }
@@ -31,14 +32,27 @@
 .tp-seg button.tp-on { opacity: 1; background: rgba(128,128,128,.16); }
 .tp-seg button:focus-visible { outline: 2px solid var(--green-500, #17bf0b); outline-offset: -2px; }
 
-.tp-interval {
-  font-size: 1.05rem;
-  margin: 0 .35rem 0 0;
-  background: transparent;
-  border: 0;
-  color: inherit;
+/* click-to-cycle refresh pill (clear, looks interactive) */
+.tp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
   cursor: pointer;
+  margin-right: .45rem;
+  padding: 1px .5rem;
+  border: 1px solid var(--border-color, rgba(128,128,128,.35));
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  opacity: .85;
 }
+.tp-pill:hover { background: rgba(128,128,128,.12); opacity: 1; }
+.tp-pill:focus-visible { outline: 2px solid var(--green-500, #17bf0b); outline-offset: -2px; }
+.tp-pill .fa { font-size: .95rem; opacity: .75; }
+.tp-pill.tp-off { opacity: .5; }
 
 /* rows */
 .tp-rows { display: block; margin-top: 4px; transition: opacity .3s ease; }
@@ -47,7 +61,7 @@
 .tp-row { padding: 4px 6px; border-top: 1px solid var(--border-color, rgba(128,128,128,.28)); }
 .tp-row:first-child { border-top: 0; }
 .tp-row:hover { background: rgba(128,128,128,.06); }
-.tp-row.tp-top { background: rgba(128,128,128,.10); }     /* busiest — neutral, never green */
+.tp-row.tp-top { background: rgba(128,128,128,.10); }   /* busiest — neutral, never green */
 
 .tp-head { display: flex; align-items: baseline; gap: .5rem; }
 .tp-name {
@@ -65,8 +79,8 @@
 .tp-bar {
   position: relative;
   flex: 1 1 auto;
-  height: 12px;
-  border-radius: 3px;
+  height: 14px;
+  border-radius: 0;                                   /* square, like native usage bars */
   background-color: var(--usage-disk-background-color, #d8d8d8);
   overflow: hidden;
 }
@@ -74,7 +88,7 @@
   position: absolute;
   left: 0; top: 0;
   height: 100%;
-  border-radius: 3px;
+  border-radius: 0;
   transition: width .35s ease;
   background: var(--green-500, #17bf0b);
 }

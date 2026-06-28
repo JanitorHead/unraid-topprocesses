@@ -26,6 +26,7 @@ $t_sort    = $tr ? _('Click a metric to sort by it; click the active one again t
 $t_refresh = $tr ? _('Refresh interval') : 'Refresh interval';
 $t_set     = $tr ? _('Settings') : 'Settings';
 $t_load    = $tr ? _('loading…') : 'loading…';
+$intLabel  = $interval > 0 ? $interval . 's' : 'off';
 
 $mytiles['topprocesses']['column1'] = <<<EOT
 <tbody title="$t_title" id="tp_tile" data-sort="$sort" data-interval="$interval">
@@ -42,7 +43,7 @@ $mytiles['topprocesses']['column1'] = <<<EOT
 <span class="tile-header-right">
 <span class="tile-header-right-controls">
 <span id="tp_sort" class="tp-seg" title="$t_sort"><button type="button" data-k="cpu">CPU</button><button type="button" data-k="mem">MEM</button></span>
-<select id="tp_interval" class="tp-interval" title="$t_refresh"><option value="2">2s</option><option value="5">5s</option><option value="10">10s</option><option value="0">off</option></select>
+<button id="tp_int" class="tp-pill" type="button" title="$t_refresh"><i class="fa fa-refresh"></i><span id="tp_int_v">$intLabel</span></button>
 <a href="/Settings/TopProcessesSettings" title="$t_set"><i class="fa fa-fw fa-cog control"></i></a>
 </span>
 </span>

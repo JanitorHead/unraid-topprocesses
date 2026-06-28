@@ -171,6 +171,7 @@ $t_sort    = $tr ? _('Click a metric to sort by it; click the active one again t
 $t_refresh = $tr ? _('Refresh interval') : 'Refresh interval';
 $t_set     = $tr ? _('Settings') : 'Settings';
 $t_load    = $tr ? _('loading…') : 'loading…';
+$intLabel  = $interval > 0 ? $interval . 's' : 'off';
 
 $mytiles['topprocesses']['column1'] = <<<EOT
 <tbody title="$t_title" id="tp_tile" data-sort="$sort" data-interval="$interval">
@@ -187,7 +188,7 @@ $mytiles['topprocesses']['column1'] = <<<EOT
 <span class="tile-header-right">
 <span class="tile-header-right-controls">
 <span id="tp_sort" class="tp-seg" title="$t_sort"><button type="button" data-k="cpu">CPU</button><button type="button" data-k="mem">MEM</button></span>
-<select id="tp_interval" class="tp-interval" title="$t_refresh"><option value="2">2s</option><option value="5">5s</option><option value="10">10s</option><option value="0">off</option></select>
+<button id="tp_int" class="tp-pill" type="button" title="$t_refresh"><i class="fa fa-refresh"></i><span id="tp_int_v">$intLabel</span></button>
 <a href="/Settings/TopProcessesSettings" title="$t_set"><i class="fa fa-fw fa-cog control"></i></a>
 </span>
 </span>
@@ -205,14 +206,16 @@ EOT;
   <FILE Name="/usr/local/emhttp/plugins/topprocesses/include/getprocs.php">
     <INLINE><![CDATA[
 <?php
-/* Top Processes — JSON data endpoint.
+/* Top Processes — JSON data endpoint (stateful, low-cost).
  *
- * Two /proc samples ~300 ms apart give htop-style %CPU (Irix: 100% = one core);
- * RSS from statm. Two-phase ranking: a cheap walk collects pid/comm/cpu/rss for
- * every process, then the expensive per-pid work (cmdline + owner lookup) runs
- * ONLY for the union of the top-N-by-CPU and top-N-by-MEM sets (~<=2*N). A short
- * shared cache in tmpfs collapses concurrent dashboard viewers onto one sampler.
- * Read-only, no side effects. PHP 8.3/8.4 clean. */
+ * %CPU is computed as a delta of utime+stime against the PREVIOUS sample stored
+ * in a tmpfs snapshot, over the real elapsed time — so a normal request does a
+ * SINGLE /proc walk and NO blocking usleep (only a one-shot 150 ms sample on a
+ * cold start when there is no prior snapshot). RSS comes from field 24 of
+ * /proc/<pid>/stat (no extra statm read). The same tmpfs file also caches the
+ * rendered JSON for ~1s so concurrent dashboard viewers share one sampler.
+ * A deliberate request-driven design — no background daemon (which would burn
+ * CPU 24/7 even when nobody is looking). Read-only. PHP 8.3/8.4 clean. */
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -222,98 +225,109 @@ $topN = (int) ($cfg['TOPN'] ?? 8);
 if ($topN < 1)  { $topN = 8; }
 if ($topN > 50) { $topN = 50; }
 
-$CACHE = "/dev/shm/topprocesses-$topN.json";
-$TTL   = 1.5; // seconds; below the 2s minimum poll, so a lone viewer still gets fresh data
+$CACHE       = "/dev/shm/topprocesses-$topN.json";
+$RESULT_TTL  = 1.0;   // serve the rendered JSON without resampling within this window
+$SNAP_MAXAGE = 15.0;  // older snapshot -> treat as cold start (brief instantaneous sample)
 
-/* serve a still-fresh shared sample if one exists */
-$blob = @file_get_contents($CACHE);
-if ($blob !== false && $blob !== '') {
-    $nl = strpos($blob, "\n");
-    if ($nl !== false) {
-        $ts = (float) substr($blob, 0, $nl);
-        if ($ts > 0 && (microtime(true) - $ts) < $TTL) {
-            echo substr($blob, $nl + 1);
-            exit;
+$now = microtime(true);
+
+$state = null;
+$raw = @file_get_contents($CACHE);
+if ($raw !== false && $raw !== '') {
+    $d = json_decode($raw, true);
+    if (is_array($d)) { $state = $d; }
+}
+/* still-fresh rendered JSON: return it untouched (no sampling) */
+if ($state && isset($state['ts'], $state['json']) && ($now - $state['ts']) < $RESULT_TTL) {
+    echo $state['json'];
+    exit;
+}
+
+/* aggregate cpu jiffies (excluding guest/guest_nice) + logical-cpu count */
+function cpu_snapshot(): array {
+    $total = 0; $ncpu = 0;
+    foreach (explode("\n", (string) @file_get_contents('/proc/stat')) as $l) {
+        if (strncmp($l, 'cpu', 3) !== 0) { break; }      // cpu* lines come first
+        if (isset($l[3]) && $l[3] === ' ') {              // aggregate "cpu " line
+            $f = preg_split('/\s+/', trim($l));
+            array_shift($f);
+            $n = min(8, count($f));
+            for ($i = 0; $i < $n; $i++) { $total += (int) $f[$i]; }
+        } else {
+            $ncpu++;                                      // cpuN
         }
     }
+    return [$total, max(1, $ncpu)];
 }
 
-/* fields after comm (which may contain spaces/parens); index 0 = state (field 3) */
-function stat_after_comm(string $stat): ?array {
-    $rp = strrpos($stat, ')');
-    if ($rp === false) { return null; }
-    $rest = preg_split('/\s+/', trim(substr($stat, $rp + 1)));
-    return $rest ?: null;
-}
-function stat_comm(string $stat): string {
-    $lp = strpos($stat, '(');
-    $rp = strrpos($stat, ')');
-    if ($lp === false || $rp === false || $rp <= $lp) { return '?'; }
-    return substr($stat, $lp + 1, $rp - $lp - 1);
-}
-/* aggregate cpu jiffies, excluding guest + guest_nice (kernel counts them in user) */
-function cpu_total(string $statline): int {
-    $p = preg_split('/\s+/', trim($statline));
-    array_shift($p);                          // "cpu" label
-    if (count($p) > 8) { $p = array_slice($p, 0, 8); }
-    $sum = 0;
-    foreach ($p as $v) { $sum += (int) $v; }
-    return $sum;
-}
-
-/* ---- pass 1: cheap walk ---- */
-$total0 = cpu_total(strtok((string) @file_get_contents('/proc/stat'), "\n"));
-$pids = [];
-foreach (scandir('/proc') ?: [] as $d) {
-    if (!ctype_digit($d)) { continue; }
-    $stat = @file_get_contents("/proc/$d/stat");
-    if ($stat === false) { continue; }
-    $rest = stat_after_comm($stat);
-    if ($rest === null || !isset($rest[12])) { continue; }
-    if (((int) ($rest[6] ?? 0)) & 0x00200000) { continue; }   // PF_KTHREAD — skip kernel threads
-    $pids[$d] = ['comm' => stat_comm($stat), 'j0' => (int) $rest[11] + (int) $rest[12]];
+/* one /proc walk -> pid => [comm, j(=utime+stime), rss(KiB)]; skips kernel threads */
+function walk_procs(): array {
+    $out = [];
+    $dh = @opendir('/proc');
+    if (!$dh) { return $out; }
+    while (($d = readdir($dh)) !== false) {
+        if (!ctype_digit($d)) { continue; }
+        $stat = @file_get_contents("/proc/$d/stat");
+        if ($stat === false) { continue; }
+        $rp = strrpos($stat, ')');
+        if ($rp === false) { continue; }
+        $rest = explode(' ', trim(substr($stat, $rp + 1)));
+        // idx0=state(f3); flags(f9)=6; utime(f14)=11; stime(f15)=12; rss(f24)=21
+        if (!isset($rest[21])) { continue; }
+        if (((int) $rest[6]) & 0x00200000) { continue; }  // PF_KTHREAD
+        $lp = strpos($stat, '(');
+        $comm = ($lp !== false && $rp > $lp) ? substr($stat, $lp + 1, $rp - $lp - 1) : '?';
+        $out[$d] = ['comm' => $comm, 'j' => (int) $rest[11] + (int) $rest[12], 'rss' => (int) $rest[21] * 4];
+    }
+    closedir($dh);
+    return $out;
 }
 
-usleep(300000); // 300 ms sampling window
+[$total1, $ncpu] = cpu_snapshot();
+$cur = walk_procs();
 
-/* ---- pass 2 ---- */
-$procstat = (string) @file_get_contents('/proc/stat');
-$ncpu = 0; $first = '';
-foreach (preg_split('/\n/', $procstat) as $l) {
-    if ($first === '' && strncmp($l, 'cpu ', 4) === 0) { $first = $l; }
-    if (preg_match('/^cpu\d+\s/', $l)) { $ncpu++; }
+$cpu = [];
+$haveSnap = $state && isset($state['per'], $state['total'], $state['ts'])
+         && ($now - $state['ts']) > 0.2 && ($now - $state['ts']) < $SNAP_MAXAGE;
+
+if ($haveSnap) {
+    $dtotal = max(1, $total1 - (int) $state['total']);
+    $prev = $state['per'];
+    foreach ($cur as $pid => $info) {
+        $p0 = isset($prev[$pid]) ? (int) $prev[$pid] : $info['j'];   // new pid -> 0 this round
+        $c = 100.0 * ($info['j'] - $p0) / $dtotal * $ncpu;
+        $cpu[$pid] = $c > 0 ? round($c, 1) : 0.0;
+    }
+} else {
+    usleep(150000); // cold start only: one short instantaneous sample
+    [$total2, ] = cpu_snapshot();
+    $cur2 = walk_procs();
+    $dtotal = max(1, $total2 - $total1);
+    foreach ($cur2 as $pid => $info) {
+        $p0 = isset($cur[$pid]) ? $cur[$pid]['j'] : $info['j'];
+        $c = 100.0 * ($info['j'] - $p0) / $dtotal * $ncpu;
+        $cpu[$pid] = $c > 0 ? round($c, 1) : 0.0;
+    }
+    $cur = $cur2;
+    $total1 = $total2;
 }
-if ($ncpu < 1) { $ncpu = 1; }
-$dtotal = max(1, cpu_total($first) - $total0);
 
-preg_match('/MemTotal:\s+(\d+)/', (string) @file_get_contents('/proc/meminfo'), $mt);
-$memTotalKb = max(1, (int) ($mt[1] ?? 0));
+$memTotalKb = (int) ($state['mem'] ?? 0);
+if ($memTotalKb <= 0) {
+    preg_match('/MemTotal:\s+(\d+)/', (string) @file_get_contents('/proc/meminfo'), $mt);
+    $memTotalKb = max(1, (int) ($mt[1] ?? 0));
+}
 
 $rows = [];
-foreach ($pids as $pid => $info) {
-    $stat = @file_get_contents("/proc/$pid/stat");
-    if ($stat === false) { continue; }
-    $rest = stat_after_comm($stat);
-    if ($rest === null || !isset($rest[12])) { continue; }
-    $cpu = 100.0 * ((int) $rest[11] + (int) $rest[12] - $info['j0']) / $dtotal * $ncpu;
-    if ($cpu < 0) { $cpu = 0.0; }
-
-    $rssKb = 0;
-    $statm = @file_get_contents("/proc/$pid/statm");
-    if ($statm !== false) {
-        $sm = preg_split('/\s+/', trim($statm));
-        $rssKb = (int) ($sm[1] ?? 0) * 4;     // resident pages * 4 KiB (x86_64)
-    }
-    $rows[$pid] = ['pid' => (int) $pid, 'cmd' => $info['comm'], 'cpu' => round($cpu, 1), 'rss' => $rssKb];
+foreach ($cur as $pid => $info) {
+    $rows[$pid] = ['pid' => (int) $pid, 'cmd' => $info['comm'], 'cpu' => $cpu[$pid] ?? 0.0, 'rss' => $info['rss']];
 }
 
-/* rank cheaply */
 $byCpu = $rows; uasort($byCpu, fn($a, $b) => $b['cpu'] <=> $a['cpu']);
 $byMem = $rows; uasort($byMem, fn($a, $b) => $b['rss'] <=> $a['rss']);
 $topCpu = array_slice($byCpu, 0, $topN, true);
 $topMem = array_slice($byMem, 0, $topN, true);
 
-/* enrich only the union (each unique pid once) */
 $userCache = [];
 $resolveUser = function (int $pid) use (&$userCache): string {
     $uid = @fileowner("/proc/$pid");
@@ -336,7 +350,7 @@ $fullCmd = function (int $pid, string $fallback): string {
 };
 
 $enriched = [];
-foreach (($topCpu + $topMem) as $pid => $r) {     // + = union by pid key
+foreach (($topCpu + $topMem) as $pid => $r) {     // union by pid key, enrich once
     $r['user'] = $resolveUser((int) $pid);
     $r['full'] = $fullCmd((int) $pid, $r['cmd']);
     $r['mem']  = round(100.0 * $r['rss'] / $memTotalKb, 1);
@@ -344,31 +358,31 @@ foreach (($topCpu + $topMem) as $pid => $r) {     // + = union by pid key
 }
 $pick = fn($set) => array_values(array_map(fn($r) => $enriched[$r['pid']], $set));
 
-$payload = json_encode([
+$json = json_encode([
     'total' => count($rows),
     'cpu'   => $pick($topCpu),
     'mem'   => $pick($topMem),
 ]);
-echo $payload;
+echo $json;
 
-/* refresh the shared cache atomically; ignore failure (e.g. read-only tmpfs) */
+/* persist snapshot (per-pid jiffies for the next delta) + rendered JSON, atomically */
+$per = [];
+foreach ($cur as $pid => $info) { $per[$pid] = $info['j']; }
+$blob = json_encode(['ts' => $now, 'total' => $total1, 'ncpu' => $ncpu, 'mem' => $memTotalKb, 'per' => $per, 'json' => $json]);
 $tmp = $CACHE . '.' . getmypid();
-if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
-    @rename($tmp, $CACHE);
-} else {
-    @unlink($tmp);
-}
+if (@file_put_contents($tmp, $blob) !== false) { @rename($tmp, $CACHE); } else { @unlink($tmp); }
 ]]></INLINE>
   </FILE>
 
   <FILE Name="/usr/local/emhttp/plugins/topprocesses/javascript/topprocesses.js">
     <INLINE><![CDATA[
 /* Top Processes — Dashboard tile client.
- * Keyed in-place DOM updates (no innerHTML rebuild): bars actually animate, no
- * flicker, no string-attribute XSS surface. One bar for the active sort metric
- * + a quiet absolute-RSS number; CPU/MEM segmented control doubles as the sort
- * key (click the active one to reverse). Self-healing lifecycle, fetch timeout,
- * per-host view memory. Vanilla JS, no deps, no dollar signs (heredoc-safe). */
+ * Keyed in-place DOM updates (bars animate, no flicker, no string-attr XSS).
+ * One bar for the active sort metric + quiet absolute RSS. CPU/MEM segmented
+ * control doubles as the sort key (click active to reverse). Refresh cadence is
+ * a click-to-cycle pill (clear affordance). Polls ONLY while the tile is both
+ * tab-visible AND on-screen/expanded (visibilitychange + IntersectionObserver),
+ * self-heals if the tile is removed. Vanilla JS, no deps, no dollar signs. */
 (function () {
   'use strict';
 
@@ -385,7 +399,7 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
   var interval = parseInt(tile.dataset.interval || '5', 10);
   if (isNaN(interval)) { interval = 5; }
 
-  try {                                   // restore last view; cfg is first-paint default only
+  try {
     var saved = JSON.parse(localStorage.getItem(STORE) || '{}');
     if (saved.sort === 'cpu' || saved.sort === 'mem') { sort = saved.sort; }
     if (saved.dir === 'asc' || saved.dir === 'desc') { dir = saved.dir; }
@@ -394,6 +408,7 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
   if (ALLOWED.indexOf(interval) < 0) { interval = 5; }
 
   var timer = null, busy = false, lastTotal = 0, lastData = null, box = null;
+  var tabVis = !document.hidden, tileVis = true;
   var nodes = Object.create(null);
 
   function save() { try { localStorage.setItem(STORE, JSON.stringify({ sort: sort, dir: dir, interval: interval })); } catch (e) {} }
@@ -477,11 +492,11 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
   function setStale(on) { var b = rowsBox(); if (b) { b.classList.toggle('tp-stale', !!on); } }
 
   function poll() {
-    if (!document.body.contains(tile)) { teardown(); return; }   // self-heal if Unraid replaced the tile
+    if (!document.body.contains(tile)) { teardown(); return; }
     if (busy) { return; }
     busy = true;
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var to = ctrl ? setTimeout(function () { ctrl.abort(); }, Math.min(Math.max(interval * 1000 - 250, 3000), 10000)) : null;
+    var to = ctrl ? setTimeout(function () { ctrl.abort(); }, Math.min(Math.max((interval || 5) * 1000 - 250, 3000), 10000)) : null;
     fetch(ENDPOINT, { cache: 'no-store', credentials: 'same-origin', signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
@@ -494,10 +509,11 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
       .then(function () { if (to) { clearTimeout(to); } busy = false; });
   }
 
-  function arm() {
+  /* run only while tab-visible AND tile on-screen/expanded, and interval > 0 */
+  function shouldRun() { return tabVis && tileVis && interval > 0; }
+  function reschedule() {
     if (timer) { clearInterval(timer); timer = null; }
-    poll();
-    if (interval > 0) { timer = setInterval(poll, interval * 1000); }
+    if (shouldRun()) { poll(); timer = setInterval(poll, interval * 1000); }
   }
 
   function syncToggle() {
@@ -510,20 +526,23 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
       btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
     }
   }
-
   function onSortClick(k) {
     if (k === sort) { dir = (dir === 'desc') ? 'asc' : 'desc'; }
     else { sort = k; dir = 'desc'; }
-    syncToggle(); render(); updateSubtitle(); save(); poll();   // instant re-render from cache, then refresh
+    syncToggle(); render(); updateSubtitle(); save(); poll();
   }
 
-  function onVis() {
-    if (document.hidden) { if (timer) { clearInterval(timer); timer = null; } }
-    else { arm(); }
+  var pill = document.getElementById('tp_int'), pillv = document.getElementById('tp_int_v');
+  function syncPill() {
+    if (pillv) { setText(pillv, interval > 0 ? interval + 's' : 'off'); }
+    if (pill) { pill.classList.toggle('tp-off', interval === 0); pill.setAttribute('aria-label', 'Refresh: ' + (interval > 0 ? interval + ' seconds' : 'off')); }
   }
+
+  function onVis() { tabVis = !document.hidden; reschedule(); }
   function teardown() {
     if (timer) { clearInterval(timer); timer = null; }
     document.removeEventListener('visibilitychange', onVis);
+    if (io) { try { io.disconnect(); } catch (e) {} }
   }
 
   var btns = tile.querySelectorAll('#tp_sort button');
@@ -532,38 +551,47 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
   }
   syncToggle();
 
-  var sel = document.getElementById('tp_interval');
-  if (sel) {
-    if (!sel.querySelector('option[value="' + interval + '"]')) {
-      var o = document.createElement('option'); o.value = String(interval); o.textContent = interval + 's'; sel.appendChild(o);
-    }
-    sel.value = String(interval);
-    sel.addEventListener('change', function () {
-      interval = parseInt(sel.value, 10); if (isNaN(interval)) { interval = 0; }
-      save(); arm();
+  if (pill) {
+    syncPill();
+    pill.addEventListener('click', function () {
+      var idx = ALLOWED.indexOf(interval);
+      interval = ALLOWED[(idx + 1) % ALLOWED.length];
+      if (idx < 0) { interval = 5; }
+      syncPill(); save(); reschedule();
     });
   }
 
+  /* pause when the rows are collapsed (native chevron -> height 0) or scrolled off-screen */
+  var io = null;
+  if (typeof IntersectionObserver !== 'undefined') {
+    io = new IntersectionObserver(function (entries) {
+      var vis = !!(entries[0] && entries[0].isIntersecting);
+      if (vis !== tileVis) { tileVis = vis; reschedule(); }
+    });
+    var rb = rowsBox(); if (rb) { io.observe(rb); }
+  }
+
   document.addEventListener('visibilitychange', onVis);
-  arm();
+  reschedule();
 })();
 ]]></INLINE>
   </FILE>
 
   <FILE Name="/usr/local/emhttp/plugins/topprocesses/styles/topprocesses.css">
     <INLINE><![CDATA[
-/* Top Processes — tile styling. Flat, native, single-accent (no gradients).
- * Colours use Unraid theme tokens with hex fallbacks so it tracks white/black/
- * gray/azure. Rows are flex <div>s. No dollar signs (inlined from a heredoc). */
+/* Top Processes — tile styling. Flat and native: square bars like the stock
+ * Processor/Array usage bars, theme tokens with hex fallbacks (tracks white/
+ * black/gray/azure), single accent colour. Rows are flex <div>s. No gradients,
+ * no rounded bars. No dollar signs (inlined from a heredoc). */
 
 .tp-glyph { font-size: 2.4rem; }
 .tp-subtitle { opacity: .6; font-size: 1.05rem; }
 
-/* CPU/MEM segmented control — also the sort key; caret shows direction */
+/* header controls — subtle, match Unraid's control chrome */
 .tp-seg {
   display: inline-flex;
   border: 1px solid var(--border-color, rgba(128,128,128,.35));
-  border-radius: 4px;
+  border-radius: 2px;
   overflow: hidden;
   margin-right: .45rem;
 }
@@ -585,14 +613,27 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
 .tp-seg button.tp-on { opacity: 1; background: rgba(128,128,128,.16); }
 .tp-seg button:focus-visible { outline: 2px solid var(--green-500, #17bf0b); outline-offset: -2px; }
 
-.tp-interval {
-  font-size: 1.05rem;
-  margin: 0 .35rem 0 0;
-  background: transparent;
-  border: 0;
-  color: inherit;
+/* click-to-cycle refresh pill (clear, looks interactive) */
+.tp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
   cursor: pointer;
+  margin-right: .45rem;
+  padding: 1px .5rem;
+  border: 1px solid var(--border-color, rgba(128,128,128,.35));
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  opacity: .85;
 }
+.tp-pill:hover { background: rgba(128,128,128,.12); opacity: 1; }
+.tp-pill:focus-visible { outline: 2px solid var(--green-500, #17bf0b); outline-offset: -2px; }
+.tp-pill .fa { font-size: .95rem; opacity: .75; }
+.tp-pill.tp-off { opacity: .5; }
 
 /* rows */
 .tp-rows { display: block; margin-top: 4px; transition: opacity .3s ease; }
@@ -601,7 +642,7 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
 .tp-row { padding: 4px 6px; border-top: 1px solid var(--border-color, rgba(128,128,128,.28)); }
 .tp-row:first-child { border-top: 0; }
 .tp-row:hover { background: rgba(128,128,128,.06); }
-.tp-row.tp-top { background: rgba(128,128,128,.10); }     /* busiest — neutral, never green */
+.tp-row.tp-top { background: rgba(128,128,128,.10); }   /* busiest — neutral, never green */
 
 .tp-head { display: flex; align-items: baseline; gap: .5rem; }
 .tp-name {
@@ -619,8 +660,8 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
 .tp-bar {
   position: relative;
   flex: 1 1 auto;
-  height: 12px;
-  border-radius: 3px;
+  height: 14px;
+  border-radius: 0;                                   /* square, like native usage bars */
   background-color: var(--usage-disk-background-color, #d8d8d8);
   overflow: hidden;
 }
@@ -628,7 +669,7 @@ if (@file_put_contents($tmp, microtime(true) . "\n" . $payload) !== false) {
   position: absolute;
   left: 0; top: 0;
   height: 100%;
-  border-radius: 3px;
+  border-radius: 0;
   transition: width .35s ease;
   background: var(--green-500, #17bf0b);
 }
