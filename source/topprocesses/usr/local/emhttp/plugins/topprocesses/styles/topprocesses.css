@@ -1,35 +1,38 @@
-/* Top Processes — tile styling.
- * Reuses native dynamix header classes; rows are flex <div>s (no tables, to
- * avoid breaking Unraid's dashboard JS). Colours use theme tokens with hex
- * fallbacks so the tile tracks white/black/gray/azure. No dollar signs (the
- * file is inlined from a PHP heredoc). */
+/* Top Processes — tile styling. Flat, native, single-accent (no gradients).
+ * Colours use Unraid theme tokens with hex fallbacks so it tracks white/black/
+ * gray/azure. Rows are flex <div>s. No dollar signs (inlined from a heredoc). */
 
 .tp-glyph { font-size: 2.4rem; }
-.tp-subtitle { opacity: .65; font-size: 1.1rem; }
+.tp-subtitle { opacity: .6; font-size: 1.05rem; }
 
-/* header controls (next to the native gear / collapse icons) */
-.tp-toggle { margin-right: .4rem; user-select: none; display: inline-flex; }
-.tp-toggle button {
+/* CPU/MEM segmented control — also the sort key; caret shows direction */
+.tp-seg {
+  display: inline-flex;
+  border: 1px solid var(--border-color, rgba(128,128,128,.35));
+  border-radius: 4px;
+  overflow: hidden;
+  margin-right: .45rem;
+}
+.tp-seg button {
   cursor: pointer;
   margin: 0;
-  padding: 0 .4rem;
+  padding: 1px .5rem;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: bold;
-  letter-spacing: .03em;
-  line-height: 1.6;
-  opacity: .5;
+  letter-spacing: .02em;
+  line-height: 1.5;
+  opacity: .55;
 }
-.tp-toggle button.tp-on { opacity: 1; color: var(--green-500, #17bf0b); }
-.tp-toggle button:focus-visible {
-  outline: 2px solid var(--green-500, #17bf0b);
-  outline-offset: 1px;
-}
+.tp-seg button + button { border-left: 1px solid var(--border-color, rgba(128,128,128,.35)); }
+.tp-seg button.tp-on { opacity: 1; background: rgba(128,128,128,.16); }
+.tp-seg button:focus-visible { outline: 2px solid var(--green-500, #17bf0b); outline-offset: -2px; }
+
 .tp-interval {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   margin: 0 .35rem 0 0;
   background: transparent;
   border: 0;
@@ -39,42 +42,26 @@
 
 /* rows */
 .tp-rows { display: block; margin-top: 4px; transition: opacity .3s ease; }
-.tp-rows.tp-stale { opacity: .45; }      /* dim when a refresh fails (honest, not frozen) */
+.tp-rows.tp-stale { opacity: .5; }
 
-.tp-row {
-  padding: 5px 2px 5px 6px;
-  border-top: 1px solid var(--border-color, rgba(128,128,128,.18));
-  border-left: 3px solid transparent;
-}
+.tp-row { padding: 4px 6px; border-top: 1px solid var(--border-color, rgba(128,128,128,.28)); }
 .tp-row:first-child { border-top: 0; }
-.tp-row.tp-top { border-left-color: var(--green-500, #17bf0b); }     /* highlight the busiest */
-.tp-row.tp-top .tp-name { color: var(--green-700, #0f7a05); }
+.tp-row:hover { background: rgba(128,128,128,.06); }
+.tp-row.tp-top { background: rgba(128,128,128,.10); }     /* busiest — neutral, never green */
 
-.tp-head { display: flex; align-items: baseline; gap: .5rem; margin-bottom: 3px; }
+.tp-head { display: flex; align-items: baseline; gap: .5rem; }
 .tp-name {
   font-weight: bold;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 12rem;
 }
-.tp-user { opacity: .75; font-size: 1.05rem; }
-.tp-pid {
-  margin-left: auto;
-  opacity: .55;
-  font-variant-numeric: tabular-nums;
-  font-size: 1.05rem;
-}
+.tp-user { flex: 0 0 auto; opacity: .6; font-size: .95rem; }
+.tp-pid  { flex: 0 0 auto; opacity: .5; font-size: .95rem; font-variant-numeric: tabular-nums; }
 
-.tp-metric { display: flex; align-items: center; gap: .4rem; margin: 2px 0; }
-.tp-k {
-  width: 2.6rem;
-  flex: 0 0 auto;
-  font-size: .95rem;
-  font-weight: bold;
-  opacity: .55;
-  letter-spacing: .03em;
-}
+.tp-metric { display: flex; align-items: center; gap: .5rem; margin-top: 2px; }
 .tp-bar {
   position: relative;
   flex: 1 1 auto;
@@ -89,29 +76,16 @@
   height: 100%;
   border-radius: 3px;
   transition: width .35s ease;
-  background: linear-gradient(90deg, var(--green-900, #0f7a05), var(--green-500, #17bf0b));
+  background: var(--green-500, #17bf0b);
 }
-.tp-pct {
-  width: 3.6rem;
-  flex: 0 0 auto;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  font-size: 1.05rem;
-}
-.tp-rss {
-  width: 4.2rem;
-  flex: 0 0 auto;
-  text-align: right;
-  opacity: .5;
-  font-size: .95rem;
-  font-variant-numeric: tabular-nums;
-}
+.tp-fill.tp-warn { background: var(--orange-500, #e0922e); }
+.tp-fill.tp-crit { background: var(--red-500, #e23232); }
 
-/* threshold escalation */
-.tp-fill.tp-warn { background: linear-gradient(90deg, #d68a00, #ffb300); }
-.tp-fill.tp-crit { background: linear-gradient(90deg, #c0392b, #ff5436); }
-.tp-pct.tp-warn { color: #e08a00; }
-.tp-pct.tp-crit { color: #e23b1e; }
+.tp-pct { flex: 0 0 auto; width: 3rem; text-align: right; font-variant-numeric: tabular-nums; }
+.tp-pct.tp-warn { color: var(--orange-700, #c87f12); }
+.tp-pct.tp-crit { color: var(--red-600, #c41e1e); }
+
+.tp-sec { flex: 0 0 auto; width: 3rem; text-align: right; opacity: .5; font-size: .95rem; font-variant-numeric: tabular-nums; }
 
 .tp-empty { opacity: .6; text-align: center; font-style: italic; padding: 6px; }
 

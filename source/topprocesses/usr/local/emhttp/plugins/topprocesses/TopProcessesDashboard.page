@@ -1,4 +1,5 @@
-Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.11.9','>')"
+Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.12.0','>=')"
 Menu="Dashboard:0"
 ---
+
 <?php include '/usr/local/emhttp/plugins/topprocesses/include/TopProcesses.php'; ?>

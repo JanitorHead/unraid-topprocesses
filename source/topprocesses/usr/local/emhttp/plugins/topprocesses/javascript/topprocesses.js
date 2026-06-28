@@ -1,11 +1,9 @@
 /* Top Processes — Dashboard tile client.
- * Polls getprocs.php on a user-selectable interval and renders process rows as
- * plain <div>s (no tables/tbodies — those break Unraid's dashboard JS).
- *
- * Features: CPU/MEM metric toggle that doubles as the sort key; click the active
- * metric again to reverse direction (htop "r"); the top consumer is highlighted;
- * absolute RSS shown next to MEM%; honest empty/stale states; basic a11y.
- * Vanilla JS, no deps, no dollar signs (safe to inline from a PHP heredoc). */
+ * Keyed in-place DOM updates (no innerHTML rebuild): bars actually animate, no
+ * flicker, no string-attribute XSS surface. One bar for the active sort metric
+ * + a quiet absolute-RSS number; CPU/MEM segmented control doubles as the sort
+ * key (click the active one to reverse). Self-healing lifecycle, fetch timeout,
+ * per-host view memory. Vanilla JS, no deps, no dollar signs (heredoc-safe). */
 (function () {
   'use strict';
 
@@ -14,105 +12,121 @@
   tile.dataset.tpInit = '1';
 
   var ENDPOINT = '/plugins/topprocesses/include/getprocs.php';
-  var sort     = tile.dataset.sort === 'mem' ? 'mem' : 'cpu';
-  var dir      = 'desc';                 // 'desc' (busiest first) | 'asc'
+  var STORE    = 'tp_view_' + location.host;
+  var ALLOWED  = [2, 5, 10, 0];
+
+  var sort = tile.dataset.sort === 'mem' ? 'mem' : 'cpu';
+  var dir  = 'desc';
   var interval = parseInt(tile.dataset.interval || '5', 10);
   if (isNaN(interval)) { interval = 5; }
 
-  var timer = null;
-  var busy  = false;
-  var lastTotal = 0;
+  try {                                   // restore last view; cfg is first-paint default only
+    var saved = JSON.parse(localStorage.getItem(STORE) || '{}');
+    if (saved.sort === 'cpu' || saved.sort === 'mem') { sort = saved.sort; }
+    if (saved.dir === 'asc' || saved.dir === 'desc') { dir = saved.dir; }
+    if (typeof saved.interval === 'number' && ALLOWED.indexOf(saved.interval) >= 0) { interval = saved.interval; }
+  } catch (e) {}
+  if (ALLOWED.indexOf(interval) < 0) { interval = 5; }
 
-  function esc(s) {
-    var d = document.createElement('div');
-    d.textContent = (s === null || s === undefined) ? '' : String(s);
-    return d.innerHTML;
+  var timer = null, busy = false, lastTotal = 0, lastData = null, box = null;
+  var nodes = Object.create(null);
+
+  function save() { try { localStorage.setItem(STORE, JSON.stringify({ sort: sort, dir: dir, interval: interval })); } catch (e) {} }
+  function num(x) { x = Number(x); return isFinite(x) ? x : 0; }
+  function level(p) { if (p >= 90) { return 'crit'; } if (p >= 60) { return 'warn'; } return 'ok'; }
+  function fmtPct(v) { return (v >= 10) ? Math.round(v) + '%' : v.toFixed(1) + '%'; }
+  function fmtKb(kb) { kb = num(kb); if (kb >= 1048576) { return (kb / 1048576).toFixed(1) + 'G'; } if (kb >= 1024) { return Math.round(kb / 1024) + 'M'; } return kb + 'K'; }
+  function setText(el, v) { v = String(v == null ? '' : v); if (el.textContent !== v) { el.textContent = v; } }
+  function rowsBox() { if (!box) { box = document.getElementById('tp_rows'); } return box; }
+
+  function makeRow() {
+    var row = document.createElement('div'); row.className = 'tp-row';
+    var head = document.createElement('div'); head.className = 'tp-head';
+    var name = document.createElement('span'); name.className = 'tp-name';
+    var user = document.createElement('span'); user.className = 'tp-user';
+    var pid  = document.createElement('span'); pid.className = 'tp-pid';
+    head.appendChild(name); head.appendChild(user); head.appendChild(pid);
+    var line = document.createElement('div'); line.className = 'tp-metric';
+    var bar  = document.createElement('span'); bar.className = 'tp-bar'; bar.setAttribute('aria-hidden', 'true');
+    var fill = document.createElement('span'); fill.className = 'tp-fill'; bar.appendChild(fill);
+    var pct  = document.createElement('span'); pct.className = 'tp-pct';
+    var sec  = document.createElement('span'); sec.className = 'tp-sec';
+    line.appendChild(bar); line.appendChild(pct); line.appendChild(sec);
+    row.appendChild(head); row.appendChild(line);
+    return { row: row, name: name, user: user, pid: pid, fill: fill, pct: pct, sec: sec };
   }
 
-  /* green -> orange -> red, mirroring Unraid's load colouring */
-  function level(pct) {
-    if (pct >= 90) { return 'crit'; }
-    if (pct >= 60) { return 'warn'; }
-    return 'ok';
+  function updateRow(n, p, isTop) {
+    var active = (sort === 'mem') ? num(p.mem) : num(p.cpu);
+    var lv = level(active);
+    setText(n.name, p.cmd);
+    var title = p.full || p.cmd || '';
+    if (n.name.title !== title) { n.name.title = title; }
+    setText(n.user, p.user);
+    setText(n.pid, p.pid);
+    var w = Math.max(0, Math.min(100, active)) + '%';
+    if (n.fill.style.width !== w) { n.fill.style.width = w; }
+    var fc = 'tp-fill tp-' + lv; if (n.fill.className !== fc) { n.fill.className = fc; }
+    setText(n.pct, fmtPct(active));
+    var pc = 'tp-pct tp-' + lv; if (n.pct.className !== pc) { n.pct.className = pc; }
+    setText(n.sec, fmtKb(p.rss));
+    n.row.classList.toggle('tp-top', !!isTop);
   }
 
-  /* KiB -> human readable */
-  function fmtKb(kb) {
-    kb = kb || 0;
-    if (kb >= 1048576) { return (kb / 1048576).toFixed(1) + ' GiB'; }
-    if (kb >= 1024)    { return Math.round(kb / 1024) + ' MiB'; }
-    return kb + ' KiB';
-  }
-
-  /* one metric line: label, bar, %, and an aligned secondary value (RSS for mem) */
-  function metric(pct, kind, extra) {
-    var w  = Math.max(0, Math.min(100, pct));
-    var lv = level(pct);
-    var label = (kind === 'cpu') ? 'CPU' : 'MEM';
-    return "<div class='tp-metric'>"
-         + "<span class='tp-k'>" + label + "</span>"
-         + "<span class='tp-bar' aria-hidden='true'><span class='tp-fill tp-" + kind + " tp-" + lv + "' style='width:" + w + "%'></span></span>"
-         + "<span class='tp-pct tp-" + lv + "'>" + pct.toFixed(1) + "%</span>"
-         + "<span class='tp-rss'>" + esc(extra || '') + "</span>"
-         + "</div>";
-  }
-
-  function render(list) {
-    var box = document.getElementById('tp_rows');
-    if (!box) { return; }
-    if (!list || !list.length) {
-      box.innerHTML = "<div class='tp-empty'>No active processes</div>";
+  function render() {
+    var b = rowsBox(); if (!b) { return; }
+    var list = (lastData && lastData[sort]) ? lastData[sort].slice() : [];
+    if (dir === 'asc') { list.reverse(); }
+    if (!list.length) {
+      b.textContent = '';
+      var e = document.createElement('div'); e.className = 'tp-empty'; e.textContent = 'No active processes';
+      b.appendChild(e);
+      for (var k in nodes) { delete nodes[k]; }
       return;
     }
-    var rows = (dir === 'asc') ? list.slice().reverse() : list;
-    var html = '';
-    for (var i = 0; i < rows.length; i++) {
-      var p = rows[i];
-      var top = (i === 0 && dir === 'desc') ? ' tp-top' : '';
-      html += "<div class='tp-row" + top + "'>"
-            + "<div class='tp-head'>"
-            +   "<span class='tp-name' title='" + esc(p.full || p.cmd) + "'>" + esc(p.cmd) + "</span>"
-            +   "<span class='tp-user'>" + esc(p.user) + "</span>"
-            +   "<span class='tp-pid'>" + esc(p.pid) + "</span>"
-            + "</div>"
-            + metric(p.cpu, 'cpu', '')
-            + metric(p.mem, 'mem', fmtKb(p.rss))
-            + "</div>";
+    var empty = b.querySelector('.tp-empty'); if (empty) { b.removeChild(empty); }
+
+    var maxI = 0, maxV = -1;
+    for (var i = 0; i < list.length; i++) {
+      var v = (sort === 'mem') ? num(list[i].mem) : num(list[i].cpu);
+      if (v > maxV) { maxV = v; maxI = i; }
     }
-    box.innerHTML = html;
+    var seen = Object.create(null), prev = null;
+    for (i = 0; i < list.length; i++) {
+      var p = list[i], key = String(p.pid); seen[key] = 1;
+      var n = nodes[key]; if (!n) { n = makeRow(); nodes[key] = n; }
+      updateRow(n, p, i === maxI);
+      var ref = prev ? prev.nextSibling : b.firstChild;
+      if (ref !== n.row) { b.insertBefore(n.row, ref); }
+      prev = n.row;
+    }
+    for (var key2 in nodes) {
+      if (!seen[key2]) {
+        if (nodes[key2].row.parentNode) { nodes[key2].row.parentNode.removeChild(nodes[key2].row); }
+        delete nodes[key2];
+      }
+    }
   }
 
-  function updateSubtitle() {
-    var sub = document.getElementById('tp_subtitle');
-    if (!sub) { return; }
-    var caret = (dir === 'desc') ? '▾' : '▴';   // ▾ / ▴
-    var txt = (sort === 'cpu' ? 'by CPU' : 'by MEM') + ' ' + caret;
-    if (lastTotal) { txt += ' · ' + lastTotal + ' processes'; }
-    sub.textContent = txt;
-  }
-
-  function setStale(on) {
-    var box = document.getElementById('tp_rows');
-    if (box) { box.classList.toggle('tp-stale', !!on); }
-  }
+  function updateSubtitle() { var s = document.getElementById('tp_subtitle'); if (s) { setText(s, lastTotal ? (lastTotal + ' processes') : ''); } }
+  function setStale(on) { var b = rowsBox(); if (b) { b.classList.toggle('tp-stale', !!on); } }
 
   function poll() {
+    if (!document.body.contains(tile)) { teardown(); return; }   // self-heal if Unraid replaced the tile
     if (busy) { return; }
     busy = true;
-    fetch(ENDPOINT, { cache: 'no-store', credentials: 'same-origin' })
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var to = ctrl ? setTimeout(function () { ctrl.abort(); }, Math.min(Math.max(interval * 1000 - 250, 3000), 10000)) : null;
+    fetch(ENDPOINT, { cache: 'no-store', credentials: 'same-origin', signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (d) {
           if (typeof d.total === 'number') { lastTotal = d.total; }
-          render(d[sort] || []);
-          updateSubtitle();
-          setStale(false);
-        } else {
-          setStale(true);
-        }
+          lastData = d; render(); updateSubtitle(); setStale(false);
+        } else { setStale(true); }
       })
       .catch(function () { setStale(true); })
-      .then(function () { busy = false; });
+      .then(function () { if (to) { clearTimeout(to); } busy = false; });
   }
 
   function arm() {
@@ -125,48 +139,46 @@
     var btns = tile.querySelectorAll('#tp_sort button');
     for (var i = 0; i < btns.length; i++) {
       var on = btns[i].dataset.k === sort;
+      var base = btns[i].dataset.k === 'cpu' ? 'CPU' : 'MEM';
+      setText(btns[i], on ? (base + ' ' + (dir === 'desc' ? '▾' : '▴')) : base);
       btns[i].classList.toggle('tp-on', on);
       btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
     }
   }
 
   function onSortClick(k) {
-    if (k === sort) {
-      dir = (dir === 'desc') ? 'asc' : 'desc';   // reverse when re-clicking the active metric
-    } else {
-      sort = k;
-      dir = 'desc';
-    }
-    syncToggle();
-    updateSubtitle();
-    poll();
+    if (k === sort) { dir = (dir === 'desc') ? 'asc' : 'desc'; }
+    else { sort = k; dir = 'desc'; }
+    syncToggle(); render(); updateSubtitle(); save(); poll();   // instant re-render from cache, then refresh
+  }
+
+  function onVis() {
+    if (document.hidden) { if (timer) { clearInterval(timer); timer = null; } }
+    else { arm(); }
+  }
+  function teardown() {
+    if (timer) { clearInterval(timer); timer = null; }
+    document.removeEventListener('visibilitychange', onVis);
   }
 
   var btns = tile.querySelectorAll('#tp_sort button');
   for (var i = 0; i < btns.length; i++) {
-    (function (b) {
-      b.addEventListener('click', function () { onSortClick(b.dataset.k); });
-    })(btns[i]);
+    (function (b) { b.addEventListener('click', function () { onSortClick(b.dataset.k); }); })(btns[i]);
   }
   syncToggle();
 
   var sel = document.getElementById('tp_interval');
   if (sel) {
+    if (!sel.querySelector('option[value="' + interval + '"]')) {
+      var o = document.createElement('option'); o.value = String(interval); o.textContent = interval + 's'; sel.appendChild(o);
+    }
     sel.value = String(interval);
     sel.addEventListener('change', function () {
-      interval = parseInt(sel.value, 10);
-      if (isNaN(interval)) { interval = 0; }
-      arm();
+      interval = parseInt(sel.value, 10); if (isNaN(interval)) { interval = 0; }
+      save(); arm();
     });
   }
 
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden) {
-      if (timer) { clearInterval(timer); timer = null; }
-    } else {
-      arm();
-    }
-  });
-
+  document.addEventListener('visibilitychange', onVis);
   arm();
 })();
