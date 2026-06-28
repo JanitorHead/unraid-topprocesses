@@ -18,7 +18,12 @@ $topN = (int) ($cfg['TOPN'] ?? 8);
 if ($topN < 1)  { $topN = 8; }
 if ($topN > 50) { $topN = 50; }
 
-$CACHE       = "/dev/shm/topprocesses-$topN.json";
+// Show kernel threads by default — on Unraid the CPU is often pegged by kernel
+// threads (ZFS z_*/txg_sync, md parity, kcompactd, kworker), so hiding them
+// would hide the real culprit. Set KTHREADS="0" to show only userspace.
+$showKt = (($cfg['KTHREADS'] ?? '1') !== '0');
+
+$CACHE       = "/dev/shm/topprocesses-$topN-" . ($showKt ? 'k' : 'u') . ".json";
 $RESULT_TTL  = 1.0;   // serve the rendered JSON without resampling within this window
 $SNAP_MAXAGE = 15.0;  // older snapshot -> treat as cold start (brief instantaneous sample)
 
@@ -53,8 +58,8 @@ function cpu_snapshot(): array {
     return [$total, max(1, $ncpu)];
 }
 
-/* one /proc walk -> pid => [comm, j(=utime+stime), rss(KiB)]; skips kernel threads */
-function walk_procs(): array {
+/* one /proc walk -> pid => [comm, j(=utime+stime), rss(KiB)] */
+function walk_procs(bool $showKt): array {
     $out = [];
     $dh = @opendir('/proc');
     if (!$dh) { return $out; }
@@ -67,7 +72,7 @@ function walk_procs(): array {
         $rest = explode(' ', trim(substr($stat, $rp + 1)));
         // idx0=state(f3); flags(f9)=6; utime(f14)=11; stime(f15)=12; rss(f24)=21
         if (!isset($rest[21])) { continue; }
-        if (((int) $rest[6]) & 0x00200000) { continue; }  // PF_KTHREAD
+        if (!$showKt && (((int) $rest[6]) & 0x00200000)) { continue; }  // PF_KTHREAD
         $lp = strpos($stat, '(');
         $comm = ($lp !== false && $rp > $lp) ? substr($stat, $lp + 1, $rp - $lp - 1) : '?';
         $out[$d] = ['comm' => $comm, 'j' => (int) $rest[11] + (int) $rest[12], 'rss' => (int) $rest[21] * 4];
@@ -77,7 +82,7 @@ function walk_procs(): array {
 }
 
 [$total1, $ncpu] = cpu_snapshot();
-$cur = walk_procs();
+$cur = walk_procs($showKt);
 
 $cpu = [];
 $haveSnap = $state && isset($state['per'], $state['total'], $state['ts'])
@@ -94,7 +99,7 @@ if ($haveSnap) {
 } else {
     usleep(150000); // cold start only: one short instantaneous sample
     [$total2, ] = cpu_snapshot();
-    $cur2 = walk_procs();
+    $cur2 = walk_procs($showKt);
     $dtotal = max(1, $total2 - $total1);
     foreach ($cur2 as $pid => $info) {
         $p0 = isset($cur[$pid]) ? $cur[$pid]['j'] : $info['j'];
