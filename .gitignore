@@ -3,3 +3,6 @@ archive/
 *.txz.md5
 .DS_Store
 Thumbs.db
+
+# local-only release/update guide for Claude (not published)
+CLAUDE.md

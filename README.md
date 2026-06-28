@@ -1,79 +1,71 @@
 # Top Processes — Unraid Dashboard Widget
 
-A system-monitor tile for the **Unraid 7.x** Dashboard that shows the processes
-consuming the most CPU/RAM — like `htop`, but in Unraid's native style. It fills the
-gap left by the official Processor and System tiles, which show *how much* is used but
-never *which process* is responsible.
+A native-looking **Dashboard tile for Unraid 7.x** that shows the processes using the
+most CPU and memory — like `htop`, but in Unraid's style. It fills the gap left by the
+official Processor and System tiles, which tell you *how much* is used but never *which
+process* is responsible.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Top Processes dashboard tile" width="560">
+</p>
 
-- **Top‑N processes** with name, user and PID
-- **CPU / MEM toggle** in the header that doubles as the sort key — click the active
-  metric again to **reverse** direction (htop's `r`)
-- **Threshold‑coloured bars** (green → orange → red) that match Unraid's look on all
-  four themes, plus **absolute memory** (e.g. `1.2 GiB`) next to MEM%
-- **Busiest process highlighted**, **honest empty/stale states**, basic a11y
-- **Configurable refresh interval** (2 / 5 / 10 s / off) — and it really changes cadence
-- **Accurate %CPU** measured from `/proc` (htop/Irix semantics, 100 % = one core),
-  not the misleading dashboard average
-- Pauses polling when the browser tab is hidden
+```
+ dockerd                       root   1234
+ CPU ███████████████░░░░░░░░░░░░░  42%
+ MEM ██████░░░░░░░░░░░░░░░░░░░░░░  18% 512M
+ shfs                          root    987
+ CPU ████████████████████████████  78%
+ MEM ██████████████░░░░░░░░░░░░░░  41% 1.2G
+```
+
+## Features
+
+- **Top‑N processes** with name, user and PID (full command line on hover).
+- **Twin CPU + RAM bars** per process — two flat, square, full‑width rails that match
+  Unraid's native usage bars; distinguished by a `CPU` / `MEM` label, with colour used
+  only for severity (green → orange → red), plus **absolute memory** (e.g. `1.2G`).
+- **Sort by CPU or MEM** from the header tabs; **native refresh selector** (2 / 5 / 10 s
+  / off) just like the Processor tile's “30 s” dropdown.
+- **Accurate %CPU** measured from `/proc` (htop/Irix semantics — 100 % = one core), not
+  the misleading dashboard average.
+- **Themes:** tracks white / black / gray / azure via Unraid's CSS tokens.
+- **Light on resources:** a stateful endpoint does a single `/proc` walk and computes
+  CPU as a delta (no blocking sleep); the tile polls **only while it's visible and
+  expanded** (pauses when collapsed, off‑screen, or the tab is hidden). No background
+  daemon.
 
 ## Install
 
-Unraid → **Plugins → Install Plugin** → paste the raw URL of `topprocesses.plg`:
+Unraid → **Plugins → Install Plugin** → paste:
 
 ```
 https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/topprocesses.plg
 ```
 
 Then open the **Dashboard** — the *Top Processes* tile appears in the left column.
-The `.plg` is self-contained (every file embedded inline), so there is no separate
-`.txz` to host; auto-update works by bumping `<!ENTITY version>` in the `.plg`.
+Defaults (rows, sort, interval) live in **Settings → Utilities → Top Processes**.
+The plugin is self‑contained (every file embedded inline) and auto‑updates from this repo.
 
-## Development loop
+## How %CPU is measured
 
-`topprocesses.plg` is generated from `source/` — never hand-edit it. After changing
-anything under `source/topprocesses/...`, regenerate:
+Computed from `/proc` using htop's Irix semantics, so 100 % means one full core. This
+avoids the well‑known “100 % in the dashboard, 15 % in htop” discrepancy. Cross‑check on
+the console with `top -bn1 -o %CPU | head -n 20`.
+
+## Building / contributing
+
+`topprocesses.plg` is **generated** from `source/` — never hand‑edit it. After changing
+anything under `source/topprocesses/…`, regenerate with a new version:
 
 ```bash
 build/make-standalone-plg.sh 2026.06.28     # writes topprocesses.plg from source/
 ```
 
-Fastest iteration on a live box (skip packaging): copy the staging tree straight onto
-the server and refresh the Dashboard.
+Fastest iteration on a live box (skip packaging): copy the staging tree onto the server
+and refresh the Dashboard:
 
 ```bash
-scp -r source/topprocesses/usr/local/emhttp/plugins/topprocesses \
-       root@TOWER:/usr/local/emhttp/plugins/
-```
-
-Verify the data endpoint at `http://TOWER/plugins/topprocesses/include/getprocs.php`
-(compare against `top -bn1 -o %CPU`), and switch the white/black/gray/azure themes.
-
-## Publishing to Community Applications
-
-1. Push this repo to GitHub as `JanitorHead/unraid-topprocesses` (public), add the
-   topics `unraid` and `unraid-plugin`.
-2. Ensure `LICENSE` (MIT), `ca_profile.xml`, `plugins/topprocesses.xml` and
-   `images/topprocesses.png` are present (they are). `PluginURL` in
-   `plugins/topprocesses.xml` must match `pluginURL` in `topprocesses.plg` byte-for-byte.
-3. (Recommended) Create a `[Plugin] Top Processes` support thread on the Unraid forum
-   and put its URL in `support=` (the `.plg`), `<Support>` and `ca_profile.xml`'s `<Forum>`.
-4. Submit at **https://ca.unraid.net/submit** → Validate → Scan → submit. Checklist:
-   https://ca.unraid.net/submit/help
-5. Each release: bump `<!ENTITY version>` (date `YYYY.MM.DD`), regenerate `topprocesses.plg`,
-   commit. Installed users and the CA listing auto-update via `pluginURL`.
-
-## Layout
-
-```
-topprocesses.plg                Canonical inline installer (generated — do not edit)
-ca_profile.xml                  Community Applications developer/repo profile
-plugins/topprocesses.xml        Community Applications plugin listing
-images/topprocesses.png         Icon (CA listing)
-source/topprocesses/...          The actual plugin files (edit here)
-build/make-standalone-plg.sh    Regenerates topprocesses.plg from source/
-build/makepkg.sh                Optional Slackware .txz build (not required)
-docs/superpowers/specs/         Design spec
+scp -r source/topprocesses/usr/local/emhttp/plugins/topprocesses root@TOWER:/usr/local/emhttp/plugins/
 ```
 
 ## License
