@@ -5,7 +5,6 @@ consuming the most CPU/RAM — like `htop`, but in Unraid's native style. It fil
 gap left by the official Processor and System tiles, which show *how much* is used but
 never *which process* is responsible.
 
-![screenshot](docs/screenshot.png)
 
 - **Top‑N processes** with name, user and PID
 - **CPU / MEM toggle** in the header that doubles as the sort key — click the active
