@@ -1,7 +1,11 @@
 /* Top Processes — Dashboard tile client.
- * Polls getprocs.php on a user-selectable interval, renders rows with
- * grey-track/green-fill mini bars, handles the CPU/MEM sort toggle and the
- * interval selector, and pauses while the tab is hidden. Vanilla JS, no deps. */
+ * Polls getprocs.php on a user-selectable interval and renders process rows as
+ * plain <div>s (no tables/tbodies — those break Unraid's dashboard JS).
+ *
+ * Features: CPU/MEM metric toggle that doubles as the sort key; click the active
+ * metric again to reverse direction (htop "r"); the top consumer is highlighted;
+ * absolute RSS shown next to MEM%; honest empty/stale states; basic a11y.
+ * Vanilla JS, no deps, no dollar signs (safe to inline from a PHP heredoc). */
 (function () {
   'use strict';
 
@@ -11,11 +15,13 @@
 
   var ENDPOINT = '/plugins/topprocesses/include/getprocs.php';
   var sort     = tile.dataset.sort === 'mem' ? 'mem' : 'cpu';
+  var dir      = 'desc';                 // 'desc' (busiest first) | 'asc'
   var interval = parseInt(tile.dataset.interval || '5', 10);
   if (isNaN(interval)) { interval = 5; }
 
   var timer = null;
   var busy  = false;
+  var lastTotal = 0;
 
   function esc(s) {
     var d = document.createElement('div');
@@ -23,40 +29,71 @@
     return d.innerHTML;
   }
 
-  /* threshold class mirrors Unraid's green -> orange -> red load colouring */
+  /* green -> orange -> red, mirroring Unraid's load colouring */
   function level(pct) {
     if (pct >= 90) { return 'crit'; }
     if (pct >= 60) { return 'warn'; }
     return 'ok';
   }
 
-  function bar(pct, kind) {
+  /* KiB -> human readable */
+  function fmtKb(kb) {
+    kb = kb || 0;
+    if (kb >= 1048576) { return (kb / 1048576).toFixed(1) + ' GiB'; }
+    if (kb >= 1024)    { return Math.round(kb / 1024) + ' MiB'; }
+    return kb + ' KiB';
+  }
+
+  /* one metric line: label, bar, %, and an aligned secondary value (RSS for mem) */
+  function metric(pct, kind, extra) {
     var w  = Math.max(0, Math.min(100, pct));
     var lv = level(pct);
-    return "<div class='tp-bar'>"
-         + "<span class='tp-fill tp-" + kind + " tp-" + lv + "' style='width:" + w + "%'></span>"
-         + "<em class='tp-" + lv + "'>" + pct.toFixed(1) + "%</em>"
+    var label = (kind === 'cpu') ? 'CPU' : 'MEM';
+    return "<div class='tp-metric'>"
+         + "<span class='tp-k'>" + label + "</span>"
+         + "<span class='tp-bar' aria-hidden='true'><span class='tp-fill tp-" + kind + " tp-" + lv + "' style='width:" + w + "%'></span></span>"
+         + "<span class='tp-pct tp-" + lv + "'>" + pct.toFixed(1) + "%</span>"
+         + "<span class='tp-rss'>" + esc(extra || '') + "</span>"
          + "</div>";
   }
 
   function render(list) {
-    var body = document.getElementById('tp_rows');
-    if (!body) { return; }
+    var box = document.getElementById('tp_rows');
+    if (!box) { return; }
     if (!list || !list.length) {
-      body.innerHTML = "<tr><td colspan='4' class='tp-empty'>—</td></tr>";
+      box.innerHTML = "<div class='tp-empty'>No active processes</div>";
       return;
     }
+    var rows = (dir === 'asc') ? list.slice().reverse() : list;
     var html = '';
-    for (var i = 0; i < list.length; i++) {
-      var p = list[i];
-      html += "<tr>"
-            + "<td class='tp-name' title='" + esc(p.cmd) + "'>" + esc(p.cmd) + "</td>"
-            + "<td class='tp-user'>" + esc(p.user) + "</td>"
-            + "<td class='tp-pid'>" + esc(p.pid) + "</td>"
-            + "<td class='tp-bars'>" + bar(p.cpu, 'cpu') + bar(p.mem, 'mem') + "</td>"
-            + "</tr>";
+    for (var i = 0; i < rows.length; i++) {
+      var p = rows[i];
+      var top = (i === 0 && dir === 'desc') ? ' tp-top' : '';
+      html += "<div class='tp-row" + top + "'>"
+            + "<div class='tp-head'>"
+            +   "<span class='tp-name' title='" + esc(p.full || p.cmd) + "'>" + esc(p.cmd) + "</span>"
+            +   "<span class='tp-user'>" + esc(p.user) + "</span>"
+            +   "<span class='tp-pid'>" + esc(p.pid) + "</span>"
+            + "</div>"
+            + metric(p.cpu, 'cpu', '')
+            + metric(p.mem, 'mem', fmtKb(p.rss))
+            + "</div>";
     }
-    body.innerHTML = html;
+    box.innerHTML = html;
+  }
+
+  function updateSubtitle() {
+    var sub = document.getElementById('tp_subtitle');
+    if (!sub) { return; }
+    var caret = (dir === 'desc') ? '▾' : '▴';   // ▾ / ▴
+    var txt = (sort === 'cpu' ? 'by CPU' : 'by MEM') + ' ' + caret;
+    if (lastTotal) { txt += ' · ' + lastTotal + ' processes'; }
+    sub.textContent = txt;
+  }
+
+  function setStale(on) {
+    var box = document.getElementById('tp_rows');
+    if (box) { box.classList.toggle('tp-stale', !!on); }
   }
 
   function poll() {
@@ -64,8 +101,17 @@
     busy = true;
     fetch(ENDPOINT, { cache: 'no-store', credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d) { render(d[sort] || []); } })
-      .catch(function () { /* transient; next tick retries */ })
+      .then(function (d) {
+        if (d) {
+          if (typeof d.total === 'number') { lastTotal = d.total; }
+          render(d[sort] || []);
+          updateSubtitle();
+          setStale(false);
+        } else {
+          setStale(true);
+        }
+      })
+      .catch(function () { setStale(true); })
       .then(function () { busy = false; });
   }
 
@@ -75,27 +121,35 @@
     if (interval > 0) { timer = setInterval(poll, interval * 1000); }
   }
 
-  function setSort(k) {
-    sort = (k === 'mem') ? 'mem' : 'cpu';
-    var links = tile.querySelectorAll('#tp_sort a');
-    for (var i = 0; i < links.length; i++) {
-      links[i].classList.toggle('tp-on', links[i].dataset.k === sort);
+  function syncToggle() {
+    var btns = tile.querySelectorAll('#tp_sort button');
+    for (var i = 0; i < btns.length; i++) {
+      var on = btns[i].dataset.k === sort;
+      btns[i].classList.toggle('tp-on', on);
+      btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
     }
-    var sub = document.getElementById('tp_subtitle');
-    if (sub) { sub.textContent = (sort === 'cpu') ? 'by CPU' : 'by MEM'; }
+  }
+
+  function onSortClick(k) {
+    if (k === sort) {
+      dir = (dir === 'desc') ? 'asc' : 'desc';   // reverse when re-clicking the active metric
+    } else {
+      sort = k;
+      dir = 'desc';
+    }
+    syncToggle();
+    updateSubtitle();
     poll();
   }
 
-  /* wire the CPU/MEM toggle */
-  var toggle = tile.querySelectorAll('#tp_sort a');
-  for (var i = 0; i < toggle.length; i++) {
-    (function (a) {
-      a.addEventListener('click', function () { setSort(a.dataset.k); });
-    })(toggle[i]);
+  var btns = tile.querySelectorAll('#tp_sort button');
+  for (var i = 0; i < btns.length; i++) {
+    (function (b) {
+      b.addEventListener('click', function () { onSortClick(b.dataset.k); });
+    })(btns[i]);
   }
-  setSort(sort); // set initial active state
+  syncToggle();
 
-  /* wire the interval selector */
   var sel = document.getElementById('tp_interval');
   if (sel) {
     sel.value = String(interval);
@@ -106,7 +160,6 @@
     });
   }
 
-  /* pause polling when the tab is hidden (avoids needless load / leaks) */
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
       if (timer) { clearInterval(timer); timer = null; }

@@ -1,24 +1,33 @@
 /* Top Processes — tile styling.
- * Reuses native dynamix header classes; only the per-row table and the
- * grey-track / green-fill mini bars are custom. Colours use theme tokens
- * with hex fallbacks so the tile tracks white/black/gray/azure. */
+ * Reuses native dynamix header classes; rows are flex <div>s (no tables, to
+ * avoid breaking Unraid's dashboard JS). Colours use theme tokens with hex
+ * fallbacks so the tile tracks white/black/gray/azure. No dollar signs (the
+ * file is inlined from a PHP heredoc). */
 
 .tp-glyph { font-size: 2.4rem; }
-
 .tp-subtitle { opacity: .65; font-size: 1.1rem; }
 
-/* header controls (sit next to the native gear / collapse icons) */
-.tp-toggle { margin-right: .4rem; user-select: none; }
-.tp-toggle a {
+/* header controls (next to the native gear / collapse icons) */
+.tp-toggle { margin-right: .4rem; user-select: none; display: inline-flex; }
+.tp-toggle button {
   cursor: pointer;
-  padding: 0 .35rem;
-  opacity: .5;
+  margin: 0;
+  padding: 0 .4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   font-size: 1.1rem;
   font-weight: bold;
   letter-spacing: .03em;
+  line-height: 1.6;
+  opacity: .5;
 }
-.tp-toggle a.tp-on { opacity: 1; color: var(--green-500, #17bf0b); }
-
+.tp-toggle button.tp-on { opacity: 1; color: var(--green-500, #17bf0b); }
+.tp-toggle button:focus-visible {
+  outline: 2px solid var(--green-500, #17bf0b);
+  outline-offset: 1px;
+}
 .tp-interval {
   font-size: 1.1rem;
   margin: 0 .35rem 0 0;
@@ -29,34 +38,48 @@
 }
 
 /* rows */
-.tp-table { width: 100%; border-collapse: collapse; }
-.tp-table td {
-  padding: 3px 6px;
-  line-height: 1.6rem;
-  white-space: nowrap;
-  vertical-align: middle;
+.tp-rows { display: block; margin-top: 4px; transition: opacity .3s ease; }
+.tp-rows.tp-stale { opacity: .45; }      /* dim when a refresh fails (honest, not frozen) */
+
+.tp-row {
+  padding: 5px 2px 5px 6px;
+  border-top: 1px solid var(--border-color, rgba(128,128,128,.18));
+  border-left: 3px solid transparent;
 }
+.tp-row:first-child { border-top: 0; }
+.tp-row.tp-top { border-left-color: var(--green-500, #17bf0b); }     /* highlight the busiest */
+.tp-row.tp-top .tp-name { color: var(--green-700, #0f7a05); }
+
+.tp-head { display: flex; align-items: baseline; gap: .5rem; margin-bottom: 3px; }
 .tp-name {
-  max-width: 12rem;
+  font-weight: bold;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-weight: bold;
+  white-space: nowrap;
+  max-width: 12rem;
 }
-.tp-user { opacity: .8; }
+.tp-user { opacity: .75; font-size: 1.05rem; }
 .tp-pid {
+  margin-left: auto;
   opacity: .55;
-  text-align: right;
   font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
 }
-.tp-bars { width: 46%; min-width: 9rem; }
-.tp-empty { opacity: .6; text-align: center; font-style: italic; }
 
-/* mini bars: grey track + green gradient fill */
+.tp-metric { display: flex; align-items: center; gap: .4rem; margin: 2px 0; }
+.tp-k {
+  width: 2.6rem;
+  flex: 0 0 auto;
+  font-size: .95rem;
+  font-weight: bold;
+  opacity: .55;
+  letter-spacing: .03em;
+}
 .tp-bar {
   position: relative;
-  height: 13px;
+  flex: 1 1 auto;
+  height: 12px;
   border-radius: 3px;
-  margin: 2px 0;
   background-color: var(--usage-disk-background-color, #d8d8d8);
   overflow: hidden;
 }
@@ -66,22 +89,32 @@
   height: 100%;
   border-radius: 3px;
   transition: width .35s ease;
-  background: linear-gradient(90deg,
-              var(--green-900, #0f7a05) 0,
-              var(--green-500, #17bf0b) 100%);
+  background: linear-gradient(90deg, var(--green-900, #0f7a05), var(--green-500, #17bf0b));
 }
-.tp-bar > em {
-  position: absolute;
-  right: 5px; top: 0;
-  line-height: 13px;
-  font-size: 1rem;
-  font-style: normal;
-  color: var(--text-color, #1d1b1b);
-  text-shadow: 0 0 2px var(--usage-disk-background-color, #d8d8d8);
+.tp-pct {
+  width: 3.6rem;
+  flex: 0 0 auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+}
+.tp-rss {
+  width: 4.2rem;
+  flex: 0 0 auto;
+  text-align: right;
+  opacity: .5;
+  font-size: .95rem;
+  font-variant-numeric: tabular-nums;
 }
 
-/* threshold escalation (fill + percentage text) */
-.tp-fill.tp-warn { background: linear-gradient(90deg, #d68a00 0, #ffb300 100%); }
-.tp-fill.tp-crit { background: linear-gradient(90deg, #c0392b 0, #ff5436 100%); }
-em.tp-warn { color: #e08a00; }
-em.tp-crit { color: #e23b1e; }
+/* threshold escalation */
+.tp-fill.tp-warn { background: linear-gradient(90deg, #d68a00, #ffb300); }
+.tp-fill.tp-crit { background: linear-gradient(90deg, #c0392b, #ff5436); }
+.tp-pct.tp-warn { color: #e08a00; }
+.tp-pct.tp-crit { color: #e23b1e; }
+
+.tp-empty { opacity: .6; text-align: center; font-style: italic; padding: 6px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-fill, .tp-rows { transition: none; }
+}

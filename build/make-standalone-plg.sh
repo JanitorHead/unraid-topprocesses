@@ -8,37 +8,58 @@ set -e
 NAME=topprocesses
 VER="${1:-2026.06.28}"
 AUTHOR=rafablues94
+GITHUB=rafablues94/unraid-topprocesses
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BASE="$ROOT/source/$NAME"
 EMHTTP="usr/local/emhttp/plugins/$NAME"
-OUT="$ROOT/${NAME}-standalone.plg"
+OUT="$ROOT/${NAME}.plg"
 
 [ -d "$BASE/$EMHTTP" ] || { echo "missing staging tree: $BASE/$EMHTTP" >&2; exit 1; }
 
 emit_file() {
   # $1 = path on disk, $2 = install path
   local disk="$1" dest="$2"
-  printf '  <FILE Name="%s">\n' "$dest"
-  printf '    <INLINE><![CDATA[\n'
-  sed 's/\r$//' "$disk"
-  printf ']]></INLINE>\n'
-  printf '  </FILE>\n\n'
+  case "$disk" in
+    *.png|*.gif|*.jpg|*.jpeg|*.ico)
+      # binary: base64-decode into place via a bash FILE (CDATA-wrapped so < > are safe)
+      printf '  <FILE Run="/bin/bash">\n'
+      printf '    <INLINE><![CDATA[\n'
+      printf 'mkdir -p "%s"\n' "$(dirname "$dest")"
+      printf "base64 -d > \"%s\" <<'B64'\n" "$dest"
+      base64 "$disk"
+      printf 'B64\n'
+      printf ']]></INLINE>\n'
+      printf '  </FILE>\n\n'
+      ;;
+    *)
+      # text: embed verbatim in CDATA
+      printf '  <FILE Name="%s">\n' "$dest"
+      printf '    <INLINE><![CDATA[\n'
+      sed 's/\r$//' "$disk"
+      printf ']]></INLINE>\n'
+      printf '  </FILE>\n\n'
+      ;;
+  esac
 }
 
 {
   cat <<XML
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
-  <!ENTITY name    "$NAME">
-  <!ENTITY author  "$AUTHOR">
-  <!ENTITY version "$VER">
-  <!ENTITY plugin  "/boot/config/plugins/&name;">
-  <!ENTITY emhttp  "/usr/local/emhttp/plugins/&name;">
+  <!ENTITY name      "$NAME">
+  <!ENTITY author    "$AUTHOR">
+  <!ENTITY version   "$VER">
+  <!ENTITY github    "$GITHUB">
+  <!ENTITY plugin    "/boot/config/plugins/&name;">
+  <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/master/&name;.plg">
 ]>
 
 <PLUGIN name="&name;"
         author="&author;"
         version="&version;"
+        pluginURL="&pluginURL;"
+        support="https://github.com/&github;"
         launch="Settings/TopProcessesSettings"
         icon="tasks"
         min="6.12.0">

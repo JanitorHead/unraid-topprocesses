@@ -5,81 +5,78 @@ consuming the most CPU/RAM — like `htop`, but in Unraid's native style. It fil
 gap left by the official Processor and System tiles, which show *how much* is used but
 never *which process* is responsible.
 
-![concept](docs/concept.txt)
+![screenshot](docs/screenshot.png)
 
 - **Top‑N processes** with name, user and PID
-- **CPU / MEM sort toggle** right in the tile header
-- **Grey‑track / green‑fill bars** that match Unraid's look (all four themes)
-- **Configurable refresh interval** (2 / 5 / 10 s / off) — and it really changes the cadence
-- **Accurate %CPU** measured from `/proc` (htop/Irix semantics), not the misleading
-  dashboard average
+- **CPU / MEM toggle** in the header that doubles as the sort key — click the active
+  metric again to **reverse** direction (htop's `r`)
+- **Threshold‑coloured bars** (green → orange → red) that match Unraid's look on all
+  four themes, plus **absolute memory** (e.g. `1.2 GiB`) next to MEM%
+- **Busiest process highlighted**, **honest empty/stale states**, basic a11y
+- **Configurable refresh interval** (2 / 5 / 10 s / off) — and it really changes cadence
+- **Accurate %CPU** measured from `/proc` (htop/Irix semantics, 100 % = one core),
+  not the misleading dashboard average
 - Pauses polling when the browser tab is hidden
 
 ## Install
 
-### Option A — Standalone (no hosting, try it now)
+Unraid → **Plugins → Install Plugin** → paste the raw URL of `topprocesses.plg`:
 
-`topprocesses-standalone.plg` embeds everything inline.
-
-1. Copy `topprocesses-standalone.plg` somewhere your Unraid box can read it, or push it
-   to a GitHub raw URL.
-2. Unraid → **Plugins → Install Plugin** → paste the URL (or a local path like
-   `/boot/config/plugins/topprocesses-standalone.plg`) → **Install**.
-3. Open the **Dashboard** — the *Top Processes* tile appears in the left column.
-
-This is the fastest way to iterate: it writes straight into RAM and is recreated on
-every boot, so no `.txz` build is needed.
-
-### Option B — Released package (`.plg` + `.txz`)
-
-For a proper, auto-updating GitHub release:
-
-```bash
-build/makepkg.sh 2026.06.28          # builds archive/topprocesses-<ver>-x86_64-1.txz + prints md5
-# put the printed MD5 into topprocesses.plg (<!ENTITY md5 ...>)
+```
+https://raw.githubusercontent.com/rafablues94/unraid-topprocesses/master/topprocesses.plg
 ```
 
-Commit `topprocesses.plg` and the `.txz`, then install via the raw URL of
-`topprocesses.plg`. `pluginURL` drives "update available" in the Plugin Manager.
+Then open the **Dashboard** — the *Top Processes* tile appears in the left column.
+The `.plg` is self-contained (every file embedded inline), so there is no separate
+`.txz` to host; auto-update works by bumping `<!ENTITY version>` in the `.plg`.
 
-## Development loop (fastest)
+## Development loop
 
-Skip packaging entirely while iterating: copy the staging tree straight onto a running
-server and refresh the Dashboard.
+`topprocesses.plg` is generated from `source/` — never hand-edit it. After changing
+anything under `source/topprocesses/...`, regenerate:
+
+```bash
+build/make-standalone-plg.sh 2026.06.28     # writes topprocesses.plg from source/
+```
+
+Fastest iteration on a live box (skip packaging): copy the staging tree straight onto
+the server and refresh the Dashboard.
 
 ```bash
 scp -r source/topprocesses/usr/local/emhttp/plugins/topprocesses \
        root@TOWER:/usr/local/emhttp/plugins/
 ```
 
-Verify: tile appears, gear opens Settings, CPU/MEM toggle works, interval select changes
-cadence, bars animate, names/users/PIDs are correct, and the JSON endpoint
-`http://TOWER/plugins/topprocesses/include/getprocs.php` returns sane numbers (compare
-against `top -bn1 -o %CPU`). Switch the white/black/gray/azure themes to confirm colours.
+Verify the data endpoint at `http://TOWER/plugins/topprocesses/include/getprocs.php`
+(compare against `top -bn1 -o %CPU`), and switch the white/black/gray/azure themes.
+
+## Publishing to Community Applications
+
+1. Push this repo to GitHub as `rafablues94/unraid-topprocesses` (public), add the
+   topics `unraid` and `unraid-plugin`.
+2. Ensure `LICENSE` (MIT), `ca_profile.xml`, `plugins/topprocesses.xml` and
+   `images/topprocesses.png` are present (they are). `PluginURL` in
+   `plugins/topprocesses.xml` must match `pluginURL` in `topprocesses.plg` byte-for-byte.
+3. (Recommended) Create a `[Plugin] Top Processes` support thread on the Unraid forum
+   and put its URL in `support=` (the `.plg`), `<Support>` and `ca_profile.xml`'s `<Forum>`.
+4. Submit at **https://ca.unraid.net/submit** → Validate → Scan → submit. Checklist:
+   https://ca.unraid.net/submit/help
+5. Each release: bump `<!ENTITY version>` (date `YYYY.MM.DD`), regenerate `topprocesses.plg`,
+   commit. Installed users and the CA listing auto-update via `pluginURL`.
 
 ## Layout
 
 ```
-topprocesses.plg               Released-package manifest (.txz via GitHub)
-topprocesses-standalone.plg    Self-contained inline manifest (generated)
-source/topprocesses/...         Staging tree (the actual plugin files)
-build/makepkg.sh                Builds the .txz
-build/make-standalone-plg.sh    Regenerates topprocesses-standalone.plg from source
+topprocesses.plg                Canonical inline installer (generated — do not edit)
+ca_profile.xml                  Community Applications developer/repo profile
+plugins/topprocesses.xml        Community Applications plugin listing
+images/topprocesses.png         Icon (CA listing)
+source/topprocesses/...          The actual plugin files (edit here)
+build/make-standalone-plg.sh    Regenerates topprocesses.plg from source/
+build/makepkg.sh                Optional Slackware .txz build (not required)
 docs/superpowers/specs/         Design spec
 ```
 
-After editing anything under `source/`, regenerate the standalone manifest:
-
-```bash
-build/make-standalone-plg.sh 2026.06.28
-```
-
-## Status
-
-Authored on Windows; **not yet verified on a live Unraid box.** See the "Open questions"
-section of the design spec for the handful of things to confirm on first install
-(settings write path, %CPU accuracy vs htop, `autov()` availability, 7.2 column layout).
-
 ## License
 
-GPL-2.0 (matches the Dynamix/webGui ecosystem this builds on).
+[MIT](LICENSE).

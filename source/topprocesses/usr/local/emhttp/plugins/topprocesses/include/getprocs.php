@@ -103,12 +103,22 @@ foreach ($pids as $pid => $info) {
         }
     }
 
+    // full command line (for the row tooltip); fall back to the short comm name
+    $full = $info['comm'];
+    $cl   = @file_get_contents("/proc/$pid/cmdline");
+    if ($cl !== false && $cl !== '') {
+        $cl = trim(str_replace("\0", ' ', $cl));
+        if ($cl !== '') { $full = $cl; }
+    }
+
     $rows[] = [
         'pid'  => (int) $pid,
         'user' => $user,
         'cmd'  => $info['comm'],
+        'full' => $full,
         'cpu'  => round($cpu, 1),
         'mem'  => round($mem, 1),
+        'rss'  => $rssKb,
     ];
 }
 
@@ -120,6 +130,7 @@ usort($byMem, fn($a, $b) => $b['mem'] <=> $a['mem']);
 
 echo json_encode([
     'nproc' => $ncpu,
+    'total' => count($rows),
     'cpu'   => array_slice($byCpu, 0, $topN),
     'mem'   => array_slice($byMem, 0, $topN),
 ]);
