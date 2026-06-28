@@ -66,7 +66,10 @@ emit_file() {
 
   <CHANGES>
 ###$VER
-- Standalone build: Top Processes dashboard widget embedded inline (no hosting required).
+- Native Dashboard tile listing the busiest CPU/RAM processes.
+- Twin flat CPU+RAM bars, sort by CPU/MEM, native refresh selector.
+- Accurate %CPU from /proc incl. kernel threads; overall CPU + io-wait readout.
+- Low-cost stateful endpoint; polls only while visible. Settings: rows/sort/interval/kernel-threads.
   </CHANGES>
 
   <FILE Run="/usr/bin/php">

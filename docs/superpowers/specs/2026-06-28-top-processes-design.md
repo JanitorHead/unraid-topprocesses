@@ -5,6 +5,11 @@
 **Author:** JanitorHead
 **Target:** Unraid 7.x (min 6.12.0)
 
+> **Note:** this is the original brainstorm. The shipped widget evolved beyond it —
+> twin flat CPU + RAM bars (not a single green bar), kernel threads shown, an overall
+> CPU / io‑wait header readout, a native `<select class="auto">` refresh control, and a
+> stateful low-cost endpoint. See the repo `README.md` for the current design.
+
 ## 1. Goal
 
 A native-looking Dashboard tile, **Top Processes**, that lists the top‑N processes

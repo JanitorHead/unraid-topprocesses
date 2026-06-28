@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Plugin>
   <Name>Top Processes</Name>
-  <Overview>A minimalist, native-looking Unraid Dashboard tile listing the processes consuming the most CPU or memory — like htop, but matching Unraid's aesthetic. Shows process name, user, PID and threshold-coloured %CPU / %MEM bars with absolute memory. Toggle CPU/MEM (click the active metric again to reverse) and the refresh interval right from the tile header.</Overview>
+  <Overview>A minimalist, native-looking Unraid Dashboard tile that lists the processes using the most CPU and memory — like htop, but matching Unraid's aesthetic. Each process shows twin flat CPU + RAM bars (severity-coloured), name, user, PID and absolute memory. Sort by CPU or MEM and pick the refresh rate right from the tile header. Accurate %CPU from /proc (kernel threads included, so the real culprit shows), with an overall CPU + io-wait readout that reconciles with the official Processor tile. Tracks all themes; light on resources, no background daemon.</Overview>
   <PluginURL>https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/topprocesses.plg</PluginURL>
   <PluginAuthor>JanitorHead</PluginAuthor>
   <Support>https://github.com/JanitorHead/unraid-topprocesses</Support>

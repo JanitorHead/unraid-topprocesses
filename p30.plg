@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "topprocesses">
   <!ENTITY author    "JanitorHead">
-  <!ENTITY version   "2026.07.03">
+  <!ENTITY version   "2026.06.30">
   <!ENTITY github    "JanitorHead/unraid-topprocesses">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
@@ -19,11 +19,8 @@
         min="6.12.0">
 
   <CHANGES>
-###2026.07.03
-- Native Dashboard tile listing the busiest CPU/RAM processes.
-- Twin flat CPU+RAM bars, sort by CPU/MEM, native refresh selector.
-- Accurate %CPU from /proc incl. kernel threads; overall CPU + io-wait readout.
-- Low-cost stateful endpoint; polls only while visible. Settings: rows/sort/interval/kernel-threads.
+###2026.06.30
+- Standalone build: Top Processes dashboard widget embedded inline (no hosting required).
   </CHANGES>
 
   <FILE Run="/usr/bin/php">
@@ -39,7 +36,7 @@
   <FILE Name="/usr/local/emhttp/plugins/topprocesses/README.md">
     <INLINE><![CDATA[
 #### Top Processes
-A native-looking Unraid Dashboard tile that lists the busiest CPU/RAM processes — twin CPU + RAM bars per process, like htop but in Unraid's style. Sort by CPU or MEM and set the refresh rate right from the tile; defaults live in Settings → Utilities → Top Processes.
+A native-looking Unraid Dashboard tile that lists the processes using the most CPU or memory — like htop, but in Unraid's style. Toggle CPU/MEM and the refresh rate right from the tile; set defaults in Settings → Utilities → Top Processes.
 ]]></INLINE>
   </FILE>
 
@@ -112,6 +109,22 @@ TOPN="8"
 SORT="cpu"
 INTERVAL="5"
 KTHREADS="1"
+]]></INLINE>
+  </FILE>
+
+  <FILE Run="/bin/bash">
+    <INLINE><![CDATA[
+mkdir -p "/usr/local/emhttp/plugins/topprocesses/images"
+base64 -d > "/usr/local/emhttp/plugins/topprocesses/images/topprocesses.png" <<'B64'
+iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABiUlEQVR4nO2bwW2EMBREh5GPKYBU
+wB0KcEpPCoA7FWwKyD0RByQi7WIbMMYe3g0Zm52x+cxhP3CjTeV7Y9/3v8iIruu8tFWlCQ81ovIV
+37YtcmIYBi8TqtKEhxrBtcm5i/fRwFe7X4L4mVnLs3rG0sW7TCDEocLur50CQhxCHEIcs2VS/fmG
+VHy996vjTdPEPQF1QvET9tGtjo/jGM+AOrH4GCYQ4hDiMOTm748fXIEjCyFDH57ahKO/AmbLj0ht
+wpEQ4hDiEOKYLZNiBiJXkXORfRS2jpTnoogobE80gRCHEIdXDEBnFkKGLh7bhLO/AmbLQ+4oXBCE
+OIQ4ZsukPYFob5HLPgrbnSmviChsL2QCIQ4hDlMEoCsVQoYuvteEK4mfuKMwxCHEIcQxWyb5BKLY
+xe7yUdhGTntZRGGbgQmEOIQ4jJkCcyiEDF3c14QcxE/8ayAo/f/Cc/PEsnGCEIfLi9mZZZtJybv/
+9ASUaMIr8c5XoAQTXBqqtUHZtrkl0o2TCq2zNxDnD1ZEsMtk7hBwAAAAAElFTkSuQmCC
+B64
 ]]></INLINE>
   </FILE>
 

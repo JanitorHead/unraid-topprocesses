@@ -5,10 +5,6 @@ most CPU and memory — like `htop`, but in Unraid's style. It fills the gap lef
 official Processor and System tiles, which tell you *how much* is used but never *which
 process* is responsible.
 
-<p align="center">
-  <img src="docs/screenshot.png" alt="Top Processes dashboard tile" width="560">
-</p>
-
 ```
  dockerd                       root   1234
  CPU ███████████████░░░░░░░░░░░░░  42%
@@ -26,8 +22,11 @@ process* is responsible.
   only for severity (green → orange → red), plus **absolute memory** (e.g. `1.2G`).
 - **Sort by CPU or MEM** from the header tabs; **native refresh selector** (2 / 5 / 10 s
   / off) just like the Processor tile's “30 s” dropdown.
-- **Accurate %CPU** measured from `/proc` (htop/Irix semantics — 100 % = one core), not
-  the misleading dashboard average.
+- **Accurate %CPU** from `/proc` (htop/Irix — 100 % = one core), **including kernel
+  threads** (ZFS, md, kworker…) so the real culprit shows — not the misleading dashboard
+  average. A header readout (`CPU X% · io‑wait Y%`) reconciles with the official Processor
+  tile and surfaces disk‑wait (which belongs to no process). Kernel threads are toggleable
+  in Settings.
 - **Themes:** tracks white / black / gray / azure via Unraid's CSS tokens.
 - **Light on resources:** a stateful endpoint does a single `/proc` walk and computes
   CPU as a delta (no blocking sleep); the tile polls **only while it's visible and
