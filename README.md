@@ -57,7 +57,7 @@ the console with `top -bn1 -o %CPU | head -n 20`.
 anything under `source/topprocesses/…`, regenerate with a new version:
 
 ```bash
-build/make-standalone-plg.sh 2026.06.28     # writes topprocesses.plg from source/
+build/make-standalone-plg.sh     # writes topprocesses.plg from source/ (version = today's date)
 ```
 
 Fastest iteration on a live box (skip packaging): copy the staging tree onto the server

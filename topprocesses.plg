@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "topprocesses">
   <!ENTITY author    "JanitorHead">
-  <!ENTITY version   "2026.07.03">
+  <!ENTITY version   "2026.06.28">
   <!ENTITY github    "JanitorHead/unraid-topprocesses">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
@@ -19,7 +19,7 @@
         min="6.12.0">
 
   <CHANGES>
-###2026.07.03
+###2026.06.28
 - Native Dashboard tile listing the busiest CPU/RAM processes.
 - Twin flat CPU+RAM bars, sort by CPU/MEM, native refresh selector.
 - Accurate %CPU from /proc incl. kernel threads; overall CPU + io-wait readout.

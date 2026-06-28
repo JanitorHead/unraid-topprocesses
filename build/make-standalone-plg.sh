@@ -6,7 +6,10 @@
 set -e
 
 NAME=topprocesses
-VER="${1:-2026.06.28}"
+# Version = today's date (YYYY.MM.DD). Pass an explicit arg only for a same-day
+# rebuild, using a letter suffix so it sorts higher (e.g. 2026.06.28a). NEVER a
+# future date — Unraid shows it verbatim and it must reflect reality.
+VER="${1:-$(date +%Y.%m.%d)}"
 AUTHOR=JanitorHead
 GITHUB=JanitorHead/unraid-topprocesses
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
