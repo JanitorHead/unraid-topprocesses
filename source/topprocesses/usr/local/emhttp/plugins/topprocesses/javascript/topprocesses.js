@@ -125,7 +125,16 @@
     }
   }
 
-  function updateSubtitle() { var s = document.getElementById('tp_subtitle'); if (s) { setText(s, lastTotal ? (lastTotal + ' processes') : ''); } }
+  function updateSubtitle() {
+    var s = document.getElementById('tp_subtitle'); if (!s) { return; }
+    var txt = lastTotal ? (lastTotal + ' processes') : '';
+    var load = lastData && lastData.load;
+    if (load && typeof load.busy === 'number') {
+      txt += (txt ? ' · ' : '') + 'CPU ' + load.busy + '%';
+      if (load.io >= 5) { txt += ' · io-wait ' + load.io + '%'; }   // explains the gap vs Overall Load
+    }
+    setText(s, txt);
+  }
   function setStale(on) { var b = rowsBox(); if (b) { b.classList.toggle('tp-stale', !!on); } }
 
   function poll() {

@@ -41,9 +41,9 @@ if ($state && isset($state['ts'], $state['json']) && ($now - $state['ts']) < $RE
     exit;
 }
 
-/* aggregate cpu jiffies (excluding guest/guest_nice) + logical-cpu count */
+/* aggregate cpu jiffies (excl. guest/guest_nice) + cpu count + idle + iowait */
 function cpu_snapshot(): array {
-    $total = 0; $ncpu = 0;
+    $total = 0; $ncpu = 0; $idle = 0; $iowait = 0;
     foreach (explode("\n", (string) @file_get_contents('/proc/stat')) as $l) {
         if (strncmp($l, 'cpu', 3) !== 0) { break; }      // cpu* lines come first
         if (isset($l[3]) && $l[3] === ' ') {              // aggregate "cpu " line
@@ -51,11 +51,13 @@ function cpu_snapshot(): array {
             array_shift($f);
             $n = min(8, count($f));
             for ($i = 0; $i < $n; $i++) { $total += (int) $f[$i]; }
+            $idle   = (int) ($f[3] ?? 0);                 // idle
+            $iowait = (int) ($f[4] ?? 0);                 // iowait
         } else {
             $ncpu++;                                      // cpuN
         }
     }
-    return [$total, max(1, $ncpu)];
+    return [$total, max(1, $ncpu), $idle, $iowait];
 }
 
 /* one /proc walk -> pid => [comm, j(=utime+stime), rss(KiB)] */
@@ -81,7 +83,7 @@ function walk_procs(bool $showKt): array {
     return $out;
 }
 
-[$total1, $ncpu] = cpu_snapshot();
+[$total1, $ncpu, $idle1, $iowait1] = cpu_snapshot();
 $cur = walk_procs($showKt);
 
 $cpu = [];
@@ -89,7 +91,9 @@ $haveSnap = $state && isset($state['per'], $state['total'], $state['ts'])
          && ($now - $state['ts']) > 0.2 && ($now - $state['ts']) < $SNAP_MAXAGE;
 
 if ($haveSnap) {
-    $dtotal = max(1, $total1 - (int) $state['total']);
+    $dtotal  = max(1, $total1 - (int) $state['total']);
+    $didle   = $idle1   - (int) ($state['idle']   ?? $idle1);
+    $diowait = $iowait1 - (int) ($state['iowait'] ?? $iowait1);
     $prev = $state['per'];
     foreach ($cur as $pid => $info) {
         $p0 = isset($prev[$pid]) ? (int) $prev[$pid] : $info['j'];   // new pid -> 0 this round
@@ -98,17 +102,25 @@ if ($haveSnap) {
     }
 } else {
     usleep(150000); // cold start only: one short instantaneous sample
-    [$total2, ] = cpu_snapshot();
+    [$total2, , $idle2, $iowait2] = cpu_snapshot();
     $cur2 = walk_procs($showKt);
-    $dtotal = max(1, $total2 - $total1);
+    $dtotal  = max(1, $total2 - $total1);
+    $didle   = $idle2   - $idle1;
+    $diowait = $iowait2 - $iowait1;
     foreach ($cur2 as $pid => $info) {
         $p0 = isset($cur[$pid]) ? $cur[$pid]['j'] : $info['j'];
         $c = 100.0 * ($info['j'] - $p0) / $dtotal * $ncpu;
         $cpu[$pid] = $c > 0 ? round($c, 1) : 0.0;
     }
     $cur = $cur2;
-    $total1 = $total2;
+    $total1 = $total2; $idle1 = $idle2; $iowait1 = $iowait2;
 }
+
+/* overall CPU context (matches the Processor tile's "Overall Load") so the list
+ * reconciles with it: busy includes iowait; iowait is surfaced separately
+ * because it belongs to no process. */
+$loadBusy = (int) round(100.0 * max(0, $dtotal - $didle) / $dtotal);
+$loadIo   = (int) round(100.0 * max(0, $diowait) / $dtotal);
 
 $memTotalKb = (int) ($state['mem'] ?? 0);
 if ($memTotalKb <= 0) {
@@ -158,6 +170,7 @@ $pick = fn($set) => array_values(array_map(fn($r) => $enriched[$r['pid']], $set)
 
 $json = json_encode([
     'total' => count($rows),
+    'load'  => ['busy' => $loadBusy, 'io' => $loadIo],
     'cpu'   => $pick($topCpu),
     'mem'   => $pick($topMem),
 ]);
@@ -166,6 +179,6 @@ echo $json;
 /* persist snapshot (per-pid jiffies for the next delta) + rendered JSON, atomically */
 $per = [];
 foreach ($cur as $pid => $info) { $per[$pid] = $info['j']; }
-$blob = json_encode(['ts' => $now, 'total' => $total1, 'ncpu' => $ncpu, 'mem' => $memTotalKb, 'per' => $per, 'json' => $json]);
+$blob = json_encode(['ts' => $now, 'total' => $total1, 'idle' => $idle1, 'iowait' => $iowait1, 'ncpu' => $ncpu, 'mem' => $memTotalKb, 'per' => $per, 'json' => $json]);
 $tmp = $CACHE . '.' . getmypid();
 if (@file_put_contents($tmp, $blob) !== false) { @rename($tmp, $CACHE); } else { @unlink($tmp); }
