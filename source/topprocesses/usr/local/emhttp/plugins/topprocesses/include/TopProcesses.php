@@ -22,11 +22,16 @@ $js  = (string) @file_get_contents("$base/javascript/topprocesses.js");
 $tr        = function_exists('_');
 $t_title   = $tr ? _('Top Processes') : 'Top Processes';
 $t_hint    = $tr ? _('Top processes by CPU/MEM. 100% = one full core (htop-style).') : 'Top processes by CPU/MEM. 100% = one full core (htop-style).';
-$t_sort    = $tr ? _('Click a metric to sort by it; click the active one again to reverse') : 'Click a metric to sort by it; click the active one again to reverse';
+$t_sort    = $tr ? _('Sort by CPU or memory') : 'Sort by CPU or memory';
 $t_refresh = $tr ? _('Refresh interval') : 'Refresh interval';
 $t_set     = $tr ? _('Settings') : 'Settings';
 $t_load    = $tr ? _('loading…') : 'loading…';
-$intLabel  = $interval > 0 ? $interval . 's' : 'off';
+
+$intOpts = '';
+foreach (['2' => '2s', '5' => '5s', '10' => '10s', '0' => 'off'] as $v => $lab) {
+    $sel = ($interval === (int) $v) ? ' selected' : '';
+    $intOpts .= "<option value=\"$v\"$sel>$lab</option>";
+}
 
 $mytiles['topprocesses']['column1'] = <<<EOT
 <tbody title="$t_title" id="tp_tile" data-sort="$sort" data-interval="$interval">
@@ -43,7 +48,7 @@ $mytiles['topprocesses']['column1'] = <<<EOT
 <span class="tile-header-right">
 <span class="tile-header-right-controls">
 <span id="tp_sort" class="tp-seg" title="$t_sort"><button type="button" data-k="cpu">CPU</button><button type="button" data-k="mem">MEM</button></span>
-<button id="tp_int" class="tp-pill" type="button" title="$t_refresh"><i class="fa fa-refresh"></i><span id="tp_int_v">$intLabel</span></button>
+<select id="tp_int" class="auto tp-int" title="$t_refresh">$intOpts</select>
 <a href="/Settings/TopProcessesSettings" title="$t_set"><i class="fa fa-fw fa-cog control"></i></a>
 </span>
 </span>

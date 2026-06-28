@@ -1,58 +1,27 @@
 /* Top Processes — tile styling. Flat and native: square bars like the stock
- * Processor/Array usage bars, theme tokens with hex fallbacks (tracks white/
- * black/gray/azure), single accent colour. Rows are flex <div>s. No gradients,
- * no rounded bars. No dollar signs (inlined from a heredoc). */
+ * Processor/Array usage bars, the refresh selector is a native <select class=auto>
+ * (same as the Processor "30 s" dropdown), CPU/MEM are plain text tabs. Theme
+ * tokens with hex fallbacks. No dollar signs (inlined from a heredoc). */
 
 .tp-glyph { font-size: 2.4rem; }
 .tp-subtitle { opacity: .6; font-size: 1.05rem; }
 
-/* header controls — subtle, match Unraid's control chrome */
-.tp-seg {
-  display: inline-flex;
-  border: 1px solid var(--border-color, rgba(128,128,128,.35));
-  border-radius: 2px;
-  overflow: hidden;
-  margin-right: .45rem;
-}
+/* CPU/MEM selector — plain text tabs (active = bold/solid, inactive = muted) */
+.tp-seg { display: inline-flex; gap: .55rem; margin-right: .55rem; }
 .tp-seg button {
+  margin: 0; padding: 0;
+  background: none; border: 0;
+  color: inherit; font: inherit; font-weight: bold;
+  line-height: 1.6;
   cursor: pointer;
-  margin: 0;
-  padding: 1px .5rem;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 1.05rem;
-  font-weight: bold;
-  letter-spacing: .02em;
-  line-height: 1.5;
-  opacity: .55;
+  opacity: .4;
 }
-.tp-seg button + button { border-left: 1px solid var(--border-color, rgba(128,128,128,.35)); }
-.tp-seg button.tp-on { opacity: 1; background: rgba(128,128,128,.16); }
-.tp-seg button:focus-visible { outline: 2px solid var(--green-500, #17bf0b); outline-offset: -2px; }
+.tp-seg button:hover { opacity: .7; }
+.tp-seg button.tp-on { opacity: 1; }
+.tp-seg button:focus-visible { outline: 1px dotted currentColor; outline-offset: 2px; }
 
-/* click-to-cycle refresh pill (clear, looks interactive) */
-.tp-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: .3rem;
-  cursor: pointer;
-  margin-right: .45rem;
-  padding: 1px .5rem;
-  border: 1px solid var(--border-color, rgba(128,128,128,.35));
-  border-radius: 2px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 1.05rem;
-  line-height: 1.5;
-  opacity: .85;
-}
-.tp-pill:hover { background: rgba(128,128,128,.12); opacity: 1; }
-.tp-pill:focus-visible { outline: 2px solid var(--green-500, #17bf0b); outline-offset: -2px; }
-.tp-pill .fa { font-size: .95rem; opacity: .75; }
-.tp-pill.tp-off { opacity: .5; }
+/* refresh interval — native select chrome via the dynamix .auto class */
+select.tp-int { font-size: 1.05rem; margin-right: .35rem; cursor: pointer; }
 
 /* rows */
 .tp-rows { display: block; margin-top: 4px; transition: opacity .3s ease; }

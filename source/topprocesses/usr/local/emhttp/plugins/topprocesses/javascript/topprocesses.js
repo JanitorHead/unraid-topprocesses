@@ -1,10 +1,10 @@
 /* Top Processes — Dashboard tile client.
  * Keyed in-place DOM updates (bars animate, no flicker, no string-attr XSS).
- * One bar for the active sort metric + quiet absolute RSS. CPU/MEM segmented
- * control doubles as the sort key (click active to reverse). Refresh cadence is
- * a click-to-cycle pill (clear affordance). Polls ONLY while the tile is both
- * tab-visible AND on-screen/expanded (visibilitychange + IntersectionObserver),
- * self-heals if the tile is removed. Vanilla JS, no deps, no dollar signs. */
+ * One bar for the active sort metric (always busiest-first) + quiet absolute
+ * RSS. CPU/MEM are plain text tabs; refresh is a native <select>. Polls ONLY
+ * while the tile is tab-visible AND on-screen/expanded (visibilitychange +
+ * IntersectionObserver); self-heals if the tile is removed. Vanilla JS, no
+ * deps, no dollar signs (heredoc-safe). */
 (function () {
   'use strict';
 
@@ -17,23 +17,21 @@
   var ALLOWED  = [2, 5, 10, 0];
 
   var sort = tile.dataset.sort === 'mem' ? 'mem' : 'cpu';
-  var dir  = 'desc';
   var interval = parseInt(tile.dataset.interval || '5', 10);
   if (isNaN(interval)) { interval = 5; }
 
   try {
     var saved = JSON.parse(localStorage.getItem(STORE) || '{}');
     if (saved.sort === 'cpu' || saved.sort === 'mem') { sort = saved.sort; }
-    if (saved.dir === 'asc' || saved.dir === 'desc') { dir = saved.dir; }
     if (typeof saved.interval === 'number' && ALLOWED.indexOf(saved.interval) >= 0) { interval = saved.interval; }
   } catch (e) {}
   if (ALLOWED.indexOf(interval) < 0) { interval = 5; }
 
   var timer = null, busy = false, lastTotal = 0, lastData = null, box = null;
-  var tabVis = !document.hidden, tileVis = true;
+  var tabVis = !document.hidden, tileVis = true, io = null;
   var nodes = Object.create(null);
 
-  function save() { try { localStorage.setItem(STORE, JSON.stringify({ sort: sort, dir: dir, interval: interval })); } catch (e) {} }
+  function save() { try { localStorage.setItem(STORE, JSON.stringify({ sort: sort, interval: interval })); } catch (e) {} }
   function num(x) { x = Number(x); return isFinite(x) ? x : 0; }
   function level(p) { if (p >= 90) { return 'crit'; } if (p >= 60) { return 'warn'; } return 'ok'; }
   function fmtPct(v) { return (v >= 10) ? Math.round(v) + '%' : v.toFixed(1) + '%'; }
@@ -77,8 +75,7 @@
 
   function render() {
     var b = rowsBox(); if (!b) { return; }
-    var list = (lastData && lastData[sort]) ? lastData[sort].slice() : [];
-    if (dir === 'asc') { list.reverse(); }
+    var list = (lastData && lastData[sort]) ? lastData[sort] : [];
     if (!list.length) {
       b.textContent = '';
       var e = document.createElement('div'); e.className = 'tp-empty'; e.textContent = 'No active processes';
@@ -131,7 +128,6 @@
       .then(function () { if (to) { clearTimeout(to); } busy = false; });
   }
 
-  /* run only while tab-visible AND tile on-screen/expanded, and interval > 0 */
   function shouldRun() { return tabVis && tileVis && interval > 0; }
   function reschedule() {
     if (timer) { clearInterval(timer); timer = null; }
@@ -142,22 +138,13 @@
     var btns = tile.querySelectorAll('#tp_sort button');
     for (var i = 0; i < btns.length; i++) {
       var on = btns[i].dataset.k === sort;
-      var base = btns[i].dataset.k === 'cpu' ? 'CPU' : 'MEM';
-      setText(btns[i], on ? (base + ' ' + (dir === 'desc' ? '▾' : '▴')) : base);
       btns[i].classList.toggle('tp-on', on);
       btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
     }
   }
   function onSortClick(k) {
-    if (k === sort) { dir = (dir === 'desc') ? 'asc' : 'desc'; }
-    else { sort = k; dir = 'desc'; }
+    sort = (k === 'mem') ? 'mem' : 'cpu';
     syncToggle(); render(); updateSubtitle(); save(); poll();
-  }
-
-  var pill = document.getElementById('tp_int'), pillv = document.getElementById('tp_int_v');
-  function syncPill() {
-    if (pillv) { setText(pillv, interval > 0 ? interval + 's' : 'off'); }
-    if (pill) { pill.classList.toggle('tp-off', interval === 0); pill.setAttribute('aria-label', 'Refresh: ' + (interval > 0 ? interval + ' seconds' : 'off')); }
   }
 
   function onVis() { tabVis = !document.hidden; reschedule(); }
@@ -173,18 +160,15 @@
   }
   syncToggle();
 
-  if (pill) {
-    syncPill();
-    pill.addEventListener('click', function () {
-      var idx = ALLOWED.indexOf(interval);
-      interval = ALLOWED[(idx + 1) % ALLOWED.length];
-      if (idx < 0) { interval = 5; }
-      syncPill(); save(); reschedule();
+  var sel = document.getElementById('tp_int');
+  if (sel) {
+    sel.value = String(interval);
+    sel.addEventListener('change', function () {
+      interval = parseInt(sel.value, 10); if (isNaN(interval)) { interval = 0; }
+      save(); reschedule();
     });
   }
 
-  /* pause when the rows are collapsed (native chevron -> height 0) or scrolled off-screen */
-  var io = null;
   if (typeof IntersectionObserver !== 'undefined') {
     io = new IntersectionObserver(function (entries) {
       var vis = !!(entries[0] && entries[0].isIntersecting);
