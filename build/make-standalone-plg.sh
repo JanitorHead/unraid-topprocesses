@@ -81,11 +81,16 @@ emit_file() {
 
 XML
 
-  # Embed every staged web file, sorted for stable output.
+  # Embed every staged TEXT web file, sorted for stable output.
+  # NOTE: binary files (e.g. the PNG icon) are deliberately NOT embedded — the
+  # base64 bash block needed a single-quoted heredoc, which Unraid's installer
+  # (it wraps Run scripts in `sh -c '...'`) cannot parse. The installed plugin
+  # uses the FontAwesome icon="tasks"; the CA listing icon is served from the
+  # GitHub raw URL, so the embedded PNG is unnecessary.
   while IFS= read -r disk; do
     rel="${disk#$BASE/}"            # usr/local/emhttp/plugins/topprocesses/...
     emit_file "$disk" "/$rel"
-  done < <(find "$BASE/$EMHTTP" -type f | LC_ALL=C sort)
+  done < <(find "$BASE/$EMHTTP" -type f ! -name '*.png' ! -name '*.gif' ! -name '*.jpg' ! -name '*.ico' | LC_ALL=C sort)
 
   cat <<'XML'
   <!-- Seed default config on first install only -->
