@@ -9,6 +9,7 @@
   <ReadMe>https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/README.md</ReadMe>
   <Category>Tools:System</Category>
   <Icon>https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/images/topprocesses.png</Icon>
+  <Screenshot>https://raw.githubusercontent.com/JanitorHead/unraid-topprocesses/master/docs/screenshot.png</Screenshot>
   <License>MIT</License>
   <MinVer>6.12</MinVer>
 </Plugin>

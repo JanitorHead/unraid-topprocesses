@@ -5,6 +5,10 @@ most CPU and memory — like `htop`, but in Unraid's style. It fills the gap lef
 official Processor and System tiles, which tell you *how much* is used but never *which
 process* is responsible.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Top Processes — twin CPU/RAM bars per process, with an overall CPU and io-wait readout" width="560">
+</p>
+
 ```
  dockerd                       root   1234
  CPU ███████████████░░░░░░░░░░░░░  42%
